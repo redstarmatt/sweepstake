@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚽ World Cup 2026 Sweepstake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a1128;
+    --navy-light: #131c3d;
+    --gold: #d4a843;
+    --gold-dim: #b8923a;
+    --bg: #f4f5f8;
+    --card: #ffffff;
+    --text: #1a1f36;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --green: #1f9d55;
+    --shadow: 0 1px 3px rgba(10,17,40,0.08), 0 1px 2px rgba(10,17,40,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    background: var(--navy);
+    color: #fff;
+    padding: 28px 20px 0;
+    border-bottom: 3px solid var(--gold);
+  }
+  .header-inner { max-width: 920px; margin: 0 auto; }
+  header h1 {
+    font-size: clamp(1.5rem, 5vw, 2.2rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+  header h1 .gold { color: var(--gold); }
+  .updated {
+    color: #9aa3b8;
+    font-size: 0.8rem;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+  nav {
+    display: flex;
+    gap: 4px;
+    margin-top: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: #9aa3b8;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 12px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -3px;
+    transition: color .15s;
+  }
+  nav button:hover { color: #fff; }
+  nav button.active {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  .tab { display: none; }
+  .tab.active { display: block; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  h2.section-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    margin-bottom: 14px;
+    letter-spacing: -0.01em;
+  }
+
+  /* Leaderboard */
+  .player-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .player-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .rank {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--muted);
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .player-card:nth-child(1) .rank { color: var(--gold); }
+  .player-name { font-weight: 700; font-size: 1.05rem; flex: 1; }
+  .player-pts {
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: var(--navy);
+  }
+  .player-pts span { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-left: 3px; }
+  .chevron {
+    color: var(--muted);
+    transition: transform .2s;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+  }
+  .player-card.open .chevron { transform: rotate(180deg); }
+  .teams {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 8px 18px 14px;
+  }
+  .player-card.open .teams { display: block; }
+  .team-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f2f5;
+    font-size: 0.92rem;
+  }
+  .team-row:last-child { border-bottom: none; }
+  .team-flag { font-size: 1.25rem; width: 26px; text-align: center; flex-shrink: 0; }
+  .team-name { flex: 1; font-weight: 500; }
+  .team-pts { font-weight: 700; color: var(--navy); }
+  .team-pts.zero { color: var(--muted); font-weight: 500; }
+
+  /* Groups */
+  .groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .group-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .group-head {
+    background: var(--navy);
+    color: var(--gold);
+    font-weight: 800;
+    font-size: 0.85rem;
+    padding: 10px 14px;
+    letter-spacing: 0.03em;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  .group-card th {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    padding: 8px 4px;
+    text-align: center;
+  }
+  .group-card th.team-col { text-align: left; padding-left: 14px; }
+  .group-card td {
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 0.85rem;
+    border-top: 1px solid #f1f2f5;
+    font-variant-numeric: tabular-nums;
+  }
+  .group-card td.team-col {
+    text-align: left;
+    padding-left: 14px;
+    font-weight: 600;
+  }
+  .group-card td.team-col .cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .group-card td.pts-col { font-weight: 800; color: var(--navy); }
+  .group-card tr.qual td { background: rgba(212,168,67,0.08); }
+  .mini-flag { font-size: 1rem; flex-shrink: 0; }
+  .team-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Results */
+  .date-group { margin-bottom: 22px; }
+  .date-label {
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  .match {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+  .match .grp-tag {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--gold-dim);
+    background: rgba(212,168,67,0.12);
+    border-radius: 5px;
+    padding: 3px 6px;
+    flex-shrink: 0;
+  }
+  .match .side {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+  .match .side.home { justify-content: flex-end; text-align: right; }
+  .match .side .nm { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match .side .fl { font-size: 1.3rem; flex-shrink: 0; }
+  .match .score {
+    font-weight: 800;
+    font-size: 1.05rem;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 8px;
+    padding: 5px 12px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .winner { color: var(--green); }
+
+  /* Knockout */
+  .ko-info {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    text-align: center;
+  }
+  .ko-info .icon { font-size: 2.5rem; }
+  .ko-info h3 { font-weight: 800; margin: 10px 0 6px; }
+  .ko-info p { color: var(--muted); font-size: 0.9rem; max-width: 440px; margin: 0 auto; }
+  .bonus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 22px;
+    text-align: left;
+  }
+  .bonus-item {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--bg);
+  }
+  .bonus-item .stage { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+  .bonus-item .val { font-size: 1.15rem; font-weight: 800; color: var(--gold-dim); }
+  .scoring-note {
+    margin-top: 18px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <h1>⚽ World Cup 2026 <span class="gold">Sweepstake</span></h1>
+    <div class="updated">Last updated: 14 June 2026</div>
+    <nav id="nav">
+      <button class="active" data-tab="leaderboard">Leaderboard</button>
+      <button data-tab="groups">Groups</button>
+      <button data-tab="results">Results</button>
+      <button data-tab="knockout">Knockout</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="leaderboard" class="tab active">
+    <h2 class="section-title">🏆 Standings</h2>
+    <div id="leaderboard-list"></div>
+  </section>
+
+  <section id="groups" class="tab">
+    <h2 class="section-title">📋 Group Stage</h2>
+    <div id="groups-grid" class="groups-grid"></div>
+  </section>
+
+  <section id="results" class="tab">
+    <h2 class="section-title">⚽ Results</h2>
+    <div id="results-list"></div>
+  </section>
+
+  <section id="knockout" class="tab">
+    <h2 class="section-title">🔑 Knockout Stage</h2>
+    <div class="ko-info">
+      <div class="icon">🏟️</div>
+      <h3>Knockout bracket to be confirmed</h3>
+      <p>The knockout rounds begin once all 12 groups are complete. Bonus points will be awarded as players' teams progress:</p>
+      <div class="bonus-grid">
+        <div class="bonus-item"><div class="stage">Round of 32</div><div class="val">+5</div></div>
+        <div class="bonus-item"><div class="stage">Round of 16</div><div class="val">+10</div></div>
+        <div class="bonus-item"><div class="stage">Quarter-final</div><div class="val">+20</div></div>
+        <div class="bonus-item"><div class="stage">Semi-final</div><div class="val">+40</div></div>
+        <div class="bonus-item"><div class="stage">Runner-up</div><div class="val">+60</div></div>
+        <div class="bonus-item"><div class="stage">Winner</div><div class="val">+100</div></div>
+      </div>
+      <div class="scoring-note">Group stage scoring: <strong>3 pts</strong> per win &middot; <strong>1 pt</strong> per draw</div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ============ DATA ============ */
+const PLAYERS = {
+  "Dee": ["England", "Switzerland", "DR Congo", "Scotland", "Egypt", "Mexico"],
+  "Alice": ["Croatia", "Argentina", "Colombia", "Ghana", "Paraguay", "Jordan"],
+  "Jen": ["Uruguay", "Saudi Arabia", "Czechia", "Norway", "Turkey", "Qatar"],
+  "Connie": ["Panama", "Japan", "Belgium", "Iraq", "Netherlands", "Iran"],
+  "Gene": ["Bosnia &amp; Herzegovina", "New Zealand", "USA", "South Africa", "Spain", "Germany"],
+  "Michele": ["Tunisia", "Senegal", "Cape Verde", "Uzbekistan", "Portugal", "South Korea"],
+  "Amy": ["Côte d'Ivoire", "Ecuador", "Haiti", "Curaçao", "Canada", "Austria"],
+  "Matt": ["Morocco", "Australia", "Algeria", "Sweden", "France", "Brazil"]
+};
+
+const GROUPS = {
+  A: ["Mexico", "South Africa", "South Korea", "Czechia"],
+  B: ["Canada", "Switzerland", "Qatar", "Bosnia &amp; Herzegovina"],
+  C: ["Brazil", "Morocco", "Haiti", "Scotland"],
+  D: ["USA", "Paraguay", "Australia", "Turkey"],
+  E: ["Germany", "Curaçao", "Côte d'Ivoire", "Ecuador"],
+  F: ["Netherlands", "Japan", "Tunisia", "Sweden"],
+  G: ["Belgium", "Egypt", "Iran", "New Zealand"],
+  H: ["Spain", "Cape Verde", "Saudi Arabia", "Uruguay"],
+  I: ["France", "Senegal", "Iraq", "Norway"],
+  J: ["Argentina", "Algeria", "Austria", "Jordan"],
+  K: ["Portugal", "DR Congo", "Uzbekistan", "Colombia"],
+  L: ["England", "Croatia", "Ghana", "Panama"]
+};
+
+const RESULTS = [
+  {date:"Jun 11", group:"A", home:"Mexico", away:"South Africa", hs:2, as:0},
+  {date:"Jun 11", group:"A", home:"South Korea", away:"Czechia", hs:2, as:1},
+  {date:"Jun 12", group:"D", home:"USA", away:"Paraguay", hs:4, as:1},
+  {date:"Jun 12", group:"B", home:"Canada", away:"Bosnia &amp; Herzegovina", hs:1, as:1},
+  {date:"Jun 12", group:"B", home:"Switzerland", away:"Qatar", hs:1, as:1},
+  {date:"Jun 13", group:"C", home:"Brazil", away:"Morocco", hs:1, as:1},
+  {date:"Jun 13", group:"C", home:"Scotland", away:"Haiti", hs:1, as:0},
+  {date:"Jun 13", group:"D", home:"Australia", away:"Turkey", hs:2, as:0}
+];
+
+const FLAGS = {
+  "Mexico":"🇲🇽","South Africa":"🇿🇦","South Korea":"🇰🇷","Czechia":"🇨🇿",
+  "Canada":"🇨🇦","Switzerland":"🇨🇭","Qatar":"🇶🇦","Bosnia &amp; Herzegovina":"🇧🇦",
+  "Brazil":"🇧🇷","Morocco":"🇲🇦","Haiti":"🇭🇹","Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "USA":"🇺🇸","Paraguay":"🇵🇾","Australia":"🇦🇺","Turkey":"🇹🇷",
+  "Germany":"🇩🇪","Curaçao":"🇨🇼","Côte d'Ivoire":"🇨🇮","Ecuador":"🇪🇨",
+  "Netherlands":"🇳🇱","Japan":"🇯🇵","Tunisia":"🇹🇳","Sweden":"🇸🇪",
+  "Belgium":"🇧🇪","Egypt":"🇪🇬","Iran":"🇮🇷","New Zealand":"🇳🇿",
+  "Spain":"🇪🇸","Cape Verde":"🇨🇻","Saudi Arabia":"🇸🇦","Uruguay":"🇺🇾",
+  "France":"🇫🇷","Senegal":"🇸🇳","Iraq":"🇮🇶","Norway":"🇳🇴",
+  "Argentina":"🇦🇷","Algeria":"🇩🇿","Austria":"🇦🇹","Jordan":"🇯🇴",
+  "Portugal":"🇵🇹","DR Congo":"🇨🇩","Uzbekistan":"🇺🇿","Colombia":"🇨🇴",
+  "England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croatia":"🇭🇷","Ghana":"🇬🇭","Panama":"🇵🇦"
+};
+
+/* ============ COMPUTE TEAM STATS ============ */
+// Initialise stats for every team in the groups
+const teamStats = {};
+Object.values(GROUPS).flat().forEach(t => {
+  teamStats[t] = { p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 };
+});
+
+RESULTS.forEach(m => {
+  const h = teamStats[m.home], a = teamStats[m.away];
+  if (!h || !a) return;
+  h.p++; a.p++;
+  h.gf += m.hs; h.ga += m.as;
+  a.gf += m.as; a.ga += m.hs;
+  if (m.hs > m.as) { h.w++; a.l++; h.pts += 3; }
+  else if (m.hs < m.as) { a.w++; h.l++; a.pts += 3; }
+  else { h.d++; a.d++; h.pts += 1; a.pts += 1; }
+});
+Object.values(teamStats).forEach(s => s.gd = s.gf - s.ga);
+
+const flag = t => FLAGS[t] || "🏳️";
+
+/* ============ LEADERBOARD ============ */
+function renderLeaderboard() {
+  const standings = Object.entries(PLAYERS).map(([name, teams]) => {
+    const total = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].pts : 0), 0);
+    return { name, teams, total };
+  }).sort((a, b) => b.total - a.total);
+
+  const el = document.getElementById('leaderboard-list');
+  el.innerHTML = standings.map((p, i) => `
+    <div class="player-card" onclick="this.classList.toggle('open')">
+      <div class="player-head">
+        <div class="rank">${i + 1}</div>
+        <div class="player-name">${p.name}</div>
+        <div class="player-pts">${p.total}<span>pts</span></div>
+        <div class="chevron">▼</div>
+      </div>
+      <div class="teams">
+        ${p.teams.map(t => {
+          const pts = teamStats[t] ? teamStats[t].pts : 0;
+          return `<div class="team-row">
+            <span class="team-flag">${flag(t)}</span>
+            <span class="team-name">${t}</span>
+            <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ============ GROUPS ============ */
+function renderGroups() {
+  const el = document.getElementById('groups-grid');
+  el.innerHTML = Object.entries(GROUPS).map(([letter, teams]) => {
+    const sorted = [...teams].sort((a, b) => {
+      const sa = teamStats[a], sb = teamStats[b];
+      return sb.pts - sa.pts || sb.gd - sa.gd || sb.gf - sa.gf || a.localeCompare(b);
+    });
+    return `
+    <div class="group-card">
+      <div class="group-head">GROUP ${letter}</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="team-col">Team</th>
+            <th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map((t, idx) => {
+            const s = teamStats[t];
+            const gd = s.gd > 0 ? '+' + s.gd : s.gd;
+            return `<tr class="${idx < 2 ? 'qual' : ''}">
+              <td class="team-col"><span class="cell"><span class="mini-flag">${flag(t)}</span><span class="team-label">${t}</span></span></td>
+              <td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${gd}</td>
+              <td class="pts-col">${s.pts}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+/* ============ RESULTS ============ */
+function renderResults() {
+  const byDate = {};
+  RESULTS.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
+
+  const el = document.getElementById('results-list');
+  el.innerHTML = Object.entries(byDate).map(([date, matches]) => `
+    <div class="date-group">
+      <div class="date-label">${date}</div>
+      ${matches.map(m => {
+        const hWin = m.hs > m.as, aWin = m.as > m.hs;
+        return `<div class="match">
+          <span class="grp-tag">${m.group}</span>
+          <div class="side home">
+            <span class="nm ${hWin ? 'winner' : ''}">${m.home}</span>
+            <span class="fl">${flag(m.home)}</span>
+          </div>
+          <span class="score">${m.hs} - ${m.as}</span>
+          <div class="side away">
+            <span class="fl">${flag(m.away)}</span>
+            <span class="nm ${aWin ? 'winner' : ''}">${m.away}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+/* ============ TABS ============ */
+document.getElementById('nav').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === btn.dataset.tab));
+});
+
+/* ============ INIT ============ */
+renderLeaderboard();
+renderGroups();
+renderResults();
+</script>
+</body>
+</html>
