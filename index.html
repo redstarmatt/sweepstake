@@ -439,7 +439,11 @@ function renderLeaderboard() {
         <div class="chevron">▼</div>
       </div>
       <div class="teams">
-        ${p.teams.map(t => {
+        ${[...p.teams].sort((a, b) => {
+          const pa = teamStats[a] ? teamStats[a].pts : 0;
+          const pb = teamStats[b] ? teamStats[b].pts : 0;
+          return pb - pa || a.localeCompare(b);
+        }).map(t => {
           const pts = teamStats[t] ? teamStats[t].pts : 0;
           return `<div class="team-row">
             <span class="team-flag">${flag(t)}</span>
