@@ -198,7 +198,9 @@
   .group-card td.pts-col { font-weight: 800; color: var(--navy); }
   .group-card tr.qual td { background: rgba(212,168,67,0.08); }
   .mini-flag { font-size: 1rem; flex-shrink: 0; }
+  .team-lines { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
   .team-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-owner { font-size: 0.62rem; font-weight: 700; color: var(--gold-dim); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
 
   /* Results */
   .date-group { margin-bottom: 22px; }
@@ -473,7 +475,7 @@ function renderGroups() {
             const s = teamStats[t];
             const gd = s.gd > 0 ? '+' + s.gd : s.gd;
             return `<tr class="${idx < 2 ? 'qual' : ''}">
-              <td class="team-col"><span class="cell"><span class="mini-flag">${flag(t)}</span><span class="team-label">${t}</span></span></td>
+              <td class="team-col"><span class="cell"><span class="mini-flag">${flag(t)}</span><span class="team-lines"><span class="team-label">${t}</span><span class="team-owner">${owner(t)}</span></span></span></td>
               <td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${gd}</td>
               <td class="pts-col">${s.pts}</td>
             </tr>`;
