@@ -238,7 +238,11 @@
     min-width: 0;
   }
   .match .side.home { justify-content: flex-end; text-align: right; }
-  .match .side .nm { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match .side .txt { display: flex; flex-direction: column; min-width: 0; }
+  .match .side.home .txt { align-items: flex-end; }
+  .match .side.away .txt { align-items: flex-start; }
+  .match .side .nm { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .match .side .owner { font-size: 0.68rem; font-weight: 700; color: var(--gold-dim); white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; }
   .match .side .fl { font-size: 1.3rem; flex-shrink: 0; }
   .match .score {
     font-weight: 800;
@@ -411,6 +415,11 @@ Object.values(teamStats).forEach(s => s.gd = s.gf - s.ga);
 
 const flag = t => FLAGS[t] || "🏳️";
 
+// Map each team to its sweepstake owner
+const TEAM_OWNER = {};
+Object.entries(PLAYERS).forEach(([name, teams]) => teams.forEach(t => { TEAM_OWNER[t] = name; }));
+const owner = t => TEAM_OWNER[t] || "";
+
 /* ============ LEADERBOARD ============ */
 function renderLeaderboard() {
   const standings = Object.entries(PLAYERS).map(([name, teams]) => {
@@ -489,13 +498,19 @@ function renderResults() {
         return `<div class="match">
           <span class="grp-tag">${m.group}</span>
           <div class="side home">
-            <span class="nm ${hWin ? 'winner' : ''}">${m.home}</span>
+            <span class="txt">
+              <span class="nm ${hWin ? 'winner' : ''}">${m.home}</span>
+              <span class="owner">${owner(m.home)}</span>
+            </span>
             <span class="fl">${flag(m.home)}</span>
           </div>
           <span class="score">${m.hs} - ${m.as}</span>
           <div class="side away">
             <span class="fl">${flag(m.away)}</span>
-            <span class="nm ${aWin ? 'winner' : ''}">${m.away}</span>
+            <span class="txt">
+              <span class="nm ${aWin ? 'winner' : ''}">${m.away}</span>
+              <span class="owner">${owner(m.away)}</span>
+            </span>
           </div>
         </div>`;
       }).join('')}
