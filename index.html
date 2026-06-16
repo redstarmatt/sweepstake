@@ -119,6 +119,14 @@
     color: var(--navy);
   }
   .player-pts span { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-left: 3px; }
+  .player-gp {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--muted);
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .player-gp span { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; margin-left: 3px; }
   .chevron {
     color: var(--muted);
     transition: transform .2s;
@@ -143,7 +151,8 @@
   .team-row:last-child { border-bottom: none; }
   .team-flag { font-size: 1.25rem; width: 26px; text-align: center; flex-shrink: 0; }
   .team-name { flex: 1; font-weight: 500; }
-  .team-pts { font-weight: 700; color: var(--navy); }
+  .team-gp { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-left: auto; white-space: nowrap; }
+  .team-pts { font-weight: 700; color: var(--navy); margin-left: 12px; min-width: 44px; text-align: right; }
   .team-pts.zero { color: var(--muted); font-weight: 500; }
 
   /* Groups */
@@ -434,7 +443,8 @@ const owner = t => TEAM_OWNER[t] || "";
 function renderLeaderboard() {
   const standings = Object.entries(PLAYERS).map(([name, teams]) => {
     const total = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].pts : 0), 0);
-    return { name, teams, total };
+    const played = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].p : 0), 0);
+    return { name, teams, total, played };
   }).sort((a, b) => b.total - a.total);
 
   const el = document.getElementById('leaderboard-list');
@@ -443,6 +453,7 @@ function renderLeaderboard() {
       <div class="player-head">
         <div class="rank">${i + 1}</div>
         <div class="player-name">${p.name}</div>
+        <div class="player-gp">${p.played}<span>played</span></div>
         <div class="player-pts">${p.total}<span>pts</span></div>
         <div class="chevron">▼</div>
       </div>
@@ -453,9 +464,11 @@ function renderLeaderboard() {
           return pb - pa || a.localeCompare(b);
         }).map(t => {
           const pts = teamStats[t] ? teamStats[t].pts : 0;
+          const gp = teamStats[t] ? teamStats[t].p : 0;
           return `<div class="team-row">
             <span class="team-flag">${flag(t)}</span>
             <span class="team-name">${t}</span>
+            <span class="team-gp">${gp} played</span>
             <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
           </div>`;
         }).join('')}
