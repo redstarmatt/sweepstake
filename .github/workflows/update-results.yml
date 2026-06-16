@@ -1,0 +1,40 @@
+name: Update results
+
+on:
+  schedule:
+    # 06:00 UTC = 07:00 UK (BST). GitHub may delay scheduled runs by a few minutes under load.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}   # allows manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-results
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Pull latest results into index.html
+        run: node scripts/update-results.mjs
+
+      - name: Commit & push if changed
+        run: |
+          if [[ -n "$(git status --porcelain index.html)" ]]; then
+            git config user.name "sweepstake-bot"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add index.html
+            git commit -m "Auto-update results ($(date -u +%Y-%m-%d))"
+            git push
+            echo "Pushed updated results."
+          else
+            echo "No changes — nothing to commit."
+          fi
