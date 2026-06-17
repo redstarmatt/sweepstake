@@ -2,8 +2,9 @@ name: Update results
 
 on:
   schedule:
-    # 06:00 UTC = 07:00 UK (BST). GitHub may delay scheduled runs by a few minutes under load.
-    - cron: '0 6 * * *'
+    # Every 3 hours at :37 (off-peak minute — on-the-hour slots are frequently delayed/dropped
+    # by GitHub). 8 runs/day so a single missed slot is harmless and evening matches land same day.
+    - cron: '37 */3 * * *'
   workflow_dispatch: {}   # allows manual "Run workflow" from the Actions tab
 
 permissions:
