@@ -423,7 +423,8 @@ const RESULTS = [
   {date:"Jun 19", group:"D", home:"Turkey", away:"Paraguay", hs:0, as:1},
   {date:"Jun 20", group:"F", home:"Netherlands", away:"Sweden", hs:5, as:1},
   {date:"Jun 20", group:"E", home:"Germany", away:"Côte d'Ivoire", hs:2, as:1},
-  {date:"Jun 20", group:"E", home:"Ecuador", away:"Curaçao", hs:0, as:0}
+  {date:"Jun 20", group:"E", home:"Ecuador", away:"Curaçao", hs:0, as:0},
+  {date:"Jun 20", group:"F", home:"Tunisia", away:"Japan", hs:0, as:4}
 ];
 
 const FLAGS = {
@@ -471,20 +472,54 @@ const owner = t => TEAM_OWNER[t] || "";
 const TEAM_GROUP = {};
 Object.entries(GROUPS).forEach(([g, teams]) => teams.forEach(t => { TEAM_GROUP[t] = teams; }));
 
-// A team is technically eliminated when it can no longer finish in the top 3 of its group.
-// (4th place can never progress: 32 advance = 12 winners + 12 runners-up + 8 best thirds.)
-// Sound rule: if 3 group rivals already have more points than this team's best possible
-// final total, it is mathematically locked into last place.
+// A team is technically eliminated when it can no longer finish in the top 3 of its group
+// (4th place never progresses: 32 advance = 12 winners + 12 runners-up + 8 best thirds).
+// We brute-force every outcome of the group's remaining games and apply the FIFA 2026
+// tiebreakers — points first, then HEAD-TO-HEAD. A team is out only if it finishes 4th in
+// EVERY scenario. Head-to-head is decisive: a team level on points with a rival that beat it
+// ranks below that rival (e.g. Tunisia can reach 3 but Sweden won their meeting 5-1).
+const pairKey = (a, b) => [a, b].sort().join('|');
+
 function isEliminated(team) {
-  const s = teamStats[team];
-  const group = TEAM_GROUP[team];
-  if (!s || !group) return false;
-  const maxFinal = s.pts + 3 * (3 - s.p); // 3 group games each, 3 pts per win
-  let surelyAbove = 0;
-  for (const u of group) {
-    if (u !== team && teamStats[u].pts > maxFinal) surelyAbove++;
+  const teams = TEAM_GROUP[team];
+  if (!teams) return false;
+  const played = RESULTS.filter(m => teams.includes(m.home) && teams.includes(m.away));
+  const playedPairs = new Set(played.map(m => pairKey(m.home, m.away)));
+
+  // remaining group fixtures = every pair not yet played
+  const remaining = [];
+  for (let i = 0; i < teams.length; i++)
+    for (let j = i + 1; j < teams.length; j++)
+      if (!playedPairs.has(pairKey(teams[i], teams[j]))) remaining.push([teams[i], teams[j]]);
+
+  // base points + head-to-head winners from games already played
+  const basePts = {}; teams.forEach(t => basePts[t] = 0);
+  const baseH2H = {};
+  for (const m of played) {
+    if (m.hs > m.as) { basePts[m.home] += 3; baseH2H[pairKey(m.home, m.away)] = m.home; }
+    else if (m.hs < m.as) { basePts[m.away] += 3; baseH2H[pairKey(m.home, m.away)] = m.away; }
+    else { basePts[m.home]++; basePts[m.away]++; baseH2H[pairKey(m.home, m.away)] = 'draw'; }
   }
-  return surelyAbove >= 3;
+
+  // try every combination of remaining results (win/draw/loss); survive if any keeps team top-3
+  for (let c = 0; c < 3 ** remaining.length; c++) {
+    const pts = { ...basePts }, h2h = { ...baseH2H };
+    let x = c;
+    for (const [a, b] of remaining) {
+      const o = x % 3; x = Math.floor(x / 3);
+      if (o === 0) { pts[a] += 3; h2h[pairKey(a, b)] = a; }
+      else if (o === 1) { pts[a]++; pts[b]++; h2h[pairKey(a, b)] = 'draw'; }
+      else { pts[b] += 3; h2h[pairKey(a, b)] = b; }
+    }
+    let above = 0;
+    for (const u of teams) {
+      if (u === team) continue;
+      if (pts[u] > pts[team]) above++;
+      else if (pts[u] === pts[team] && h2h[pairKey(u, team)] === u) above++; // rival won H2H
+    }
+    if (above < 3) return false; // a scenario exists where team finishes top-3
+  }
+  return true; // 4th in every possible scenario
 }
 
 /* ============ LEADERBOARD ============ */
