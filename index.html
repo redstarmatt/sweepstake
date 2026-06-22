@@ -189,7 +189,7 @@
   /* Fixed layout so long names (e.g. Bosnia & Herzegovina) wrap instead of shoving
      the P/W/D/L/GD/Pts columns off the edge — esp. with two groups side-by-side. */
   .group-card table { table-layout: fixed; }
-  .group-card th:not(.team-col), .group-card td:not(.team-col) { width: 30px; }
+  .group-card th:not(.team-col), .group-card td:not(.team-col) { width: 26px; padding-left: 2px; padding-right: 2px; }
   .group-card th {
     font-size: 0.65rem;
     color: var(--muted);
@@ -221,7 +221,7 @@
   .group-card tr.qual td { background: rgba(212,168,67,0.08); }
   .mini-flag { font-size: 1rem; flex-shrink: 0; }
   .team-lines { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
-  .team-label { white-space: normal; overflow-wrap: break-word; }
+  .team-label { white-space: normal; overflow-wrap: break-word; font-size: 0.8rem; }
   .team-owner { font-size: 0.62rem; font-weight: 700; color: var(--gold-dim); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
 
   /* Results */
