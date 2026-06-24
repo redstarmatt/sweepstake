@@ -160,6 +160,13 @@
     color: var(--loss, #c0392b); background: rgba(192,57,43,0.1); border-radius: 4px;
     text-decoration: none; vertical-align: middle;
   }
+  .team-row.through .team-pts { color: var(--green, #1f9d55); }
+  .qual-tag {
+    display: inline-block; margin-left: 6px; padding: 1px 5px;
+    font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--green, #1f9d55); background: rgba(31,157,85,0.12); border-radius: 4px;
+    text-decoration: none; vertical-align: middle;
+  }
   .team-gp { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-left: auto; white-space: nowrap; }
   .team-pts { font-weight: 700; color: var(--navy); margin-left: 12px; min-width: 44px; text-align: right; }
   .team-pts.zero { color: var(--muted); font-weight: 500; }
@@ -488,17 +495,26 @@ const owner = t => TEAM_OWNER[t] || "";
 const TEAM_GROUP = {};
 Object.entries(GROUPS).forEach(([g, teams]) => teams.forEach(t => { TEAM_GROUP[t] = teams; }));
 
-// A team is technically eliminated when it can no longer finish in the top 3 of its group
-// (4th place never progresses: 32 advance = 12 winners + 12 runners-up + 8 best thirds).
-// We brute-force every outcome of the group's remaining games and apply the FIFA 2026
-// tiebreakers — points first, then HEAD-TO-HEAD. A team is out only if it finishes 4th in
-// EVERY scenario. Head-to-head is decisive: a team level on points with a rival that beat it
-// ranks below that rival (e.g. Tunisia can reach 3 but Sweden won their meeting 5-1).
+// === Group progression maths ========================================================
+// Brute-force every outcome (win/draw/loss) of a group's remaining games and apply the
+// FIFA 2026 tiebreakers — points first, then HEAD-TO-HEAD (the 2026 change: the direct
+// result between level teams now beats overall goal difference). For each scenario we count
+// how many rivals finish ABOVE the team. A drawn head-to-head is the only ambiguous case
+// (2026 then goes to goals, which need scorelines we don't model), so the caller's tie
+// policy decides it:
+//   • elimination ("can the team still sneak top-3?") is optimistic — a drawn H2H does NOT
+//     count the rival above — and flags OUT only if the team is 4th in EVERY scenario.
+//     (e.g. Tunisia can reach 3, but Sweden beat them 5-1 so Sweden always ranks above.)
+//   • qualification ("is the team CERTAINLY top-2?") is pessimistic — a drawn H2H DOES count
+//     the rival as a threat — and flags THROUGH only if the team is top-2 in every scenario.
 const pairKey = (a, b) => [a, b].sort().join('|');
 
-function isEliminated(team) {
+// Count rivals finishing above `team` for every possible set of remaining results.
+// tiePessimistic: on equal points, false = rival counts only if it beat the team;
+// true = rival counts unless the team beat it. Returns one count per scenario (or null).
+function rivalsAboveScenarios(team, tiePessimistic) {
   const teams = TEAM_GROUP[team];
-  if (!teams) return false;
+  if (!teams) return null;
   const played = RESULTS.filter(m => teams.includes(m.home) && teams.includes(m.away));
   const playedPairs = new Set(played.map(m => pairKey(m.home, m.away)));
 
@@ -517,7 +533,7 @@ function isEliminated(team) {
     else { basePts[m.home]++; basePts[m.away]++; baseH2H[pairKey(m.home, m.away)] = 'draw'; }
   }
 
-  // try every combination of remaining results (win/draw/loss); survive if any keeps team top-3
+  const counts = [];
   for (let c = 0; c < 3 ** remaining.length; c++) {
     const pts = { ...basePts }, h2h = { ...baseH2H };
     let x = c;
@@ -531,11 +547,35 @@ function isEliminated(team) {
     for (const u of teams) {
       if (u === team) continue;
       if (pts[u] > pts[team]) above++;
-      else if (pts[u] === pts[team] && h2h[pairKey(u, team)] === u) above++; // rival won H2H
+      else if (pts[u] === pts[team]) {
+        const h = h2h[pairKey(u, team)];           // who won the head-to-head
+        if (!tiePessimistic) {
+          if (h === u) above++;                    // OUT: only a rival that beat the team ranks above
+        } else {
+          // THROUGH must be certain: the team sits above a level rival only in a clean TWO-way
+          // tie it won outright. With 3+ teams level the order needs head-to-head goal maths we
+          // don't model, so treat any such rival as a live threat rather than risk a false claim.
+          const multiway = teams.some(w => w !== team && w !== u && pts[w] === pts[team]);
+          if (h !== team || multiway) above++;
+        }
+      }
     }
-    if (above < 3) return false; // a scenario exists where team finishes top-3
+    counts.push(above);
   }
-  return true; // 4th in every possible scenario
+  return counts;
+}
+
+// OUT: 4th in every scenario — can't even reach the top 3 that best-thirds advance from.
+function isEliminated(team) {
+  const counts = rivalsAboveScenarios(team, false);
+  return counts ? counts.every(a => a >= 3) : false;
+}
+
+// THROUGH: guaranteed top-2 in every scenario (top 2 of every group always advance). We don't
+// try to prove a 3rd-placed team safe — that needs cross-group best-third maths.
+function isQualified(team) {
+  const counts = rivalsAboveScenarios(team, true);
+  return counts ? counts.every(a => a <= 1) : false;
 }
 
 /* ============ LEADERBOARD ============ */
@@ -565,9 +605,12 @@ function renderLeaderboard() {
           const pts = teamStats[t] ? teamStats[t].pts : 0;
           const gp = teamStats[t] ? teamStats[t].p : 0;
           const out = isEliminated(t);
-          return `<div class="team-row${out ? ' out' : ''}">
+          const through = !out && isQualified(t);   // mutually exclusive, but guard anyway
+          const tag = out ? '<span class="out-tag">out</span>'
+                    : through ? '<span class="qual-tag">qualified</span>' : '';
+          return `<div class="team-row${out ? ' out' : through ? ' through' : ''}">
             <span class="team-flag">${flag(t)}</span>
-            <span class="team-name">${t}${out ? '<span class="out-tag">out</span>' : ''}</span>
+            <span class="team-name">${t}${tag}</span>
             <span class="team-gp">${gp} played</span>
             <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
           </div>`;
