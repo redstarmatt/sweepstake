@@ -5,9 +5,9 @@
 //   PRIMARY  live:  https://worldcup26.ir/get/games
 //   FALLBACK fixed: https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json
 //
-// It only touches the data array + the "Last updated" line — never the rendering logic.
-// Knockout matches are deliberately skipped for now (the page has no bonus engine yet);
-// they'll be handled in a one-off page change when the knockouts begin.
+// It touches the RESULTS + KO_RESULTS data arrays + the "Last updated" line — never the
+// rendering logic. Group matches go into RESULTS (append-only, as before). Knockout matches
+// are rebuilt into KO_RESULTS (tagged by stage) as soon as the feed names their participants.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,6 +36,8 @@ function sliceBalanced(src, marker, open, close) {
 const GROUPS = (0, eval)('(' + sliceBalanced(html, 'const GROUPS', '{', '}').literal + ')');
 const resBlock = sliceBalanced(html, 'const RESULTS', '[', ']');
 const RESULTS = (0, eval)('(' + resBlock.literal + ')');
+const koBlock = sliceBalanced(html, 'const KO_RESULTS', '[', ']');
+const KO_EXISTING = (0, eval)('(' + koBlock.literal + ')');
 
 // canonical names + group-letter lookup, derived from the page so they stay in sync
 const groupOf = {};
@@ -43,7 +45,7 @@ for (const [g, teams] of Object.entries(GROUPS)) for (const t of teams) groupOf[
 const canonical = Object.keys(groupOf);
 
 /* ---------- team-name normalisation ---------- */
-const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/&amp;/g, '&').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 const ALIASES = {
@@ -102,17 +104,75 @@ async function getOpen() {
   return out;
 }
 
+/* ---------- knockout sources ---------- */
+// Stage codes shared with the page: R32, R16, QF, SF, 3P (third-place), F (final).
+const STAGE_LIVE = { r32:'R32', r16:'R16', qf:'QF', sf:'SF', final:'F', third:'3P' };
+const STAGE_OPEN = {
+  'round of 32':'R32', 'round of 16':'R16',
+  'quarter-final':'QF', 'quarter-finals':'QF', 'quarterfinal':'QF',
+  'semi-final':'SF', 'semi-finals':'SF', 'semifinal':'SF',
+  'final':'F', 'match for third place':'3P', 'third place play-off':'3P',
+};
+const STAGE_ORDER = ['R32', 'R16', 'QF', 'SF', '3P', 'F'];
+
+// Knockout matches whose participants the feed has named (played or upcoming). done:false
+// means fixtured-but-not-played, so its 0-0 score must be ignored by consumers.
+async function getLiveKO() {
+  const r = await fetch('https://worldcup26.ir/get/games', { headers: { accept: 'application/json' } });
+  if (!r.ok) throw new Error('live ' + r.status);
+  const data = await r.json();
+  const out = [];
+  for (const g of (data.games || data)) {
+    const stage = STAGE_LIVE[String(g.type || '').toLowerCase()];
+    if (!stage) continue;
+    const home = toCanon(g.home_team_name_en), away = toCanon(g.away_team_name_en);
+    if (!home || !away) continue;
+    const done = String(g.finished).toUpperCase() === 'TRUE';
+    const hs = done ? +g.home_score : 0, as = done ? +g.away_score : 0;
+    const win = done ? (hs > as ? home : as > hs ? away : null) : null;  // live feed carries no shootout data
+    out.push({ stage, home, away, hs, as, done, win });
+  }
+  return out;
+}
+
+async function getOpenKO() {
+  const r = await fetch('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json');
+  if (!r.ok) throw new Error('openfootball ' + r.status);
+  const d = await r.json();
+  const out = [];
+  for (const m of (d.matches || [])) {
+    const stage = STAGE_OPEN[String(m.round || '').toLowerCase().trim()];
+    if (!stage) continue;
+    const home = toCanon(m.team1), away = toCanon(m.team2);
+    if (!home || !away) continue;
+    const done = !!(m.score && Array.isArray(m.score.ft));
+    let hs = 0, as = 0, win = null;
+    if (done) {
+      const s = m.score, dec = Array.isArray(s.et) ? s.et : s.ft;   // goals that stand (after extra time)
+      hs = dec[0]; as = dec[1];
+      win = hs > as ? home : as > hs ? away : null;
+      if (!win && Array.isArray(s.p)) win = s.p[0] > s.p[1] ? home : s.p[1] > s.p[0] ? away : null;  // shootout
+    }
+    out.push({ stage, home, away, hs, as, done, win });
+  }
+  return out;
+}
+
 /* ---------- combine, dedupe, append ---------- */
 // Dedupe by team-pair only: in the group stage two teams meet exactly once, so the
 // date is irrelevant for matching (and our hand-entered dates may differ from the feed's).
 const key = (h, a) => [h, a].sort().join('|');
 
-let live = [], open = [];
+let live = [], open = [], liveKO = [], openKO = [];
 try { live = await getLive(); } catch (e) { console.warn('live source failed:', e.message); }
 try { open = await getOpen(); } catch (e) { console.warn('fallback source failed:', e.message); }
-if (!live.length && !open.length) { console.error('Both sources empty — aborting, no changes.'); process.exit(0); }
+try { liveKO = await getLiveKO(); } catch (e) { console.warn('live KO source failed:', e.message); }
+try { openKO = await getOpenKO(); } catch (e) { console.warn('fallback KO source failed:', e.message); }
+if (!live.length && !open.length && !liveKO.length && !openKO.length) {
+  console.error('All sources empty — aborting, no changes.'); process.exit(0);
+}
 
-// union: prefer live; warn on score conflicts
+/* ----- group stage: union (prefer live), append new matches by team-pair ----- */
 const merged = new Map();
 for (const g of live) merged.set(key(g.home, g.away), g);
 for (const g of open) {
@@ -135,22 +195,47 @@ for (const g of merged.values()) {
   RESULTS.push(entry);
   added.push(entry);
 }
+if (added.length) RESULTS.sort((a, b) => dnum(a.date) - dnum(b.date));
 
-if (!added.length) { console.log('No new results.'); process.exit(0); }
+/* ----- knockout: rebuild KO_RESULTS from the feeds (prefer live; a played result beats a fixture) ----- */
+const koKey = k => k.stage + '|' + [k.home, k.away].sort().join('|');
+const koRank = k => (k.done ? 2 : 0) + (k.win != null ? 1 : 0);   // prefer played, then a decided result (e.g. pens)
+const koMap = new Map();
+for (const g of [...openKO, ...liveKO]) {              // live iterated last → wins equal-rank ties
+  const prev = koMap.get(koKey(g));
+  if (!prev || koRank(g) >= koRank(prev)) koMap.set(koKey(g), g);
+}
+const koList = [...koMap.values()].sort((a, b) =>
+  STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage) || a.home.localeCompare(b.home));
+// only overwrite existing KO data if the feeds returned some (don't wipe on a transient glitch)
+const koSig = arr => JSON.stringify(arr.map(k => [k.stage, k.home, k.away, k.hs, k.as, k.done, k.win ?? null]));
+const koChanged = koList.length > 0 && koSig(koList) !== koSig(KO_EXISTING);
 
-RESULTS.sort((a, b) => dnum(a.date) - dnum(b.date));
+if (!added.length && !koChanged) { console.log('No new results.'); process.exit(0); }
 
-/* ---------- rewrite the file ---------- */
-const lines = RESULTS.map(r =>
-  `  {date:${JSON.stringify(r.date)}, group:${JSON.stringify(r.group)}, home:${JSON.stringify(r.home)}, away:${JSON.stringify(r.away)}, hs:${r.hs}, as:${r.as}}`
-);
-const newArray = '[\n' + lines.join(',\n') + '\n]';
-html = html.slice(0, resBlock.start) + newArray + html.slice(resBlock.end);
+/* ---------- rewrite the file (later block first, so the earlier block's offsets stay valid) ---------- */
+if (koChanged) {
+  const koLines = koList.map(k => k.done
+    ? `  {stage:${JSON.stringify(k.stage)}, home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:true, win:${JSON.stringify(k.win)}}`
+    : `  {stage:${JSON.stringify(k.stage)}, home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:false}`);
+  html = html.slice(0, koBlock.start) + '[\n' + koLines.join(',\n') + '\n]' + html.slice(koBlock.end);
+}
+if (added.length) {
+  const lines = RESULTS.map(r =>
+    `  {date:${JSON.stringify(r.date)}, group:${JSON.stringify(r.group)}, home:${JSON.stringify(r.home)}, away:${JSON.stringify(r.away)}, hs:${r.hs}, as:${r.as}}`);
+  html = html.slice(0, resBlock.start) + '[\n' + lines.join(',\n') + '\n]' + html.slice(resBlock.end);
+}
 
 const now = new Date();
 const stamp = `${now.getUTCDate()} ${MONTHS[now.getUTCMonth()]} ${now.getUTCFullYear()}`;
 html = html.replace(/Last updated:[^<]*/, `Last updated: ${stamp}`);
 
 fs.writeFileSync(FILE, html);
-console.log(`Added ${added.length} match(es):`);
-for (const a of added) console.log(`  ${a.date} [${a.group}] ${a.home} ${a.hs}-${a.as} ${a.away}`);
+if (added.length) {
+  console.log(`Added ${added.length} group match(es):`);
+  for (const a of added) console.log(`  ${a.date} [${a.group}] ${a.home} ${a.hs}-${a.as} ${a.away}`);
+}
+if (koChanged) {
+  const played = koList.filter(k => k.done).length;
+  console.log(`KO_RESULTS: ${koList.length} match(es) — ${played} played, ${koList.length - played} fixtured.`);
+}

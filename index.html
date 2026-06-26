@@ -349,8 +349,23 @@
   .ko-team { font-weight: 600; font-size: 0.9rem; color: var(--text); }
   .ko-owner { margin-left: auto; font-size: 0.7rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
   .ko-slot.tbd .ko-team { color: var(--muted); font-style: italic; font-weight: 500; font-size: 0.84rem; }
+  .ko-score { font-weight: 800; font-size: 0.95rem; color: var(--navy); min-width: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ko-pens { font-size: 0.5rem; font-weight: 800; color: var(--green); letter-spacing: 0.02em; margin-left: 1px; top: -0.5em; }
+  .ko-match.played .ko-slot.lose { opacity: 0.5; }
+  .ko-slot.win .ko-team { font-weight: 800; }
+  .ko-slot.win .ko-score { color: var(--green); }
   .ko-info.ko-bonus { margin-top: 10px; }
   .ko-info.ko-bonus p { margin-bottom: 0; }
+  /* Knockout bonus indicators on the leaderboard */
+  .player-bonus {
+    display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 5px;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.04em; vertical-align: middle;
+    color: var(--gold-dim); background: rgba(212,168,67,0.16);
+  }
+  .ko-bonus-chip {
+    margin-left: 8px; padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+    font-size: 0.66rem; font-weight: 800; color: var(--gold-dim); background: rgba(212,168,67,0.16);
+  }
 </style>
 </head>
 <body>
@@ -493,6 +508,15 @@ const RESULTS = [
   {date:"Jun 25", group:"D", home:"Paraguay", away:"Australia", hs:0, as:0}
 ];
 
+// Knockout matches — auto-populated by scripts/update-results.mjs from the live feeds.
+// stage ∈ R32/R16/QF/SF/3P/F. done:false = fixtured but not yet played (scores ignored).
+const KO_RESULTS = [
+  {stage:"R32", home:"Brazil", away:"Japan", hs:0, as:0, done:false},
+  {stage:"R32", home:"Netherlands", away:"Morocco", hs:0, as:0, done:false},
+  {stage:"R32", home:"South Africa", away:"Canada", hs:0, as:0, done:false},
+  {stage:"R32", home:"USA", away:"Bosnia &amp; Herzegovina", hs:0, as:0, done:false}
+];
+
 const FLAGS = {
   "Mexico":"🇲🇽","South Africa":"🇿🇦","South Korea":"🇰🇷","Czechia":"🇨🇿",
   "Canada":"🇨🇦","Switzerland":"🇨🇭","Qatar":"🇶🇦","Bosnia &amp; Herzegovina":"🇧🇦",
@@ -624,9 +648,10 @@ function isQualified(team) {
 /* ============ LEADERBOARD ============ */
 function renderLeaderboard() {
   const standings = Object.entries(PLAYERS).map(([name, teams]) => {
-    const total = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].pts : 0), 0);
+    const groupPts = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].pts : 0), 0);
+    const bonus = teams.reduce((sum, t) => sum + koBonus(t), 0);
     const played = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].p : 0), 0);
-    return { name, teams, total, played };
+    return { name, teams, bonus, total: groupPts + bonus, played };
   }).sort((a, b) => b.total - a.total);
 
   const el = document.getElementById('leaderboard-list');
@@ -634,19 +659,20 @@ function renderLeaderboard() {
     <div class="player-card" onclick="this.classList.toggle('open')">
       <div class="player-head">
         <div class="rank">${i + 1}</div>
-        <div class="player-name">${p.name}</div>
+        <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}</div>
         <div class="player-gp">${p.played}<span>played</span></div>
         <div class="player-pts">${p.total}<span>pts</span></div>
         <div class="chevron">▼</div>
       </div>
       <div class="teams">
         ${[...p.teams].sort((a, b) => {
-          const pa = teamStats[a] ? teamStats[a].pts : 0;
-          const pb = teamStats[b] ? teamStats[b].pts : 0;
+          const pa = (teamStats[a] ? teamStats[a].pts : 0) + koBonus(a);
+          const pb = (teamStats[b] ? teamStats[b].pts : 0) + koBonus(b);
           return pb - pa || a.localeCompare(b);
         }).map(t => {
           const pts = teamStats[t] ? teamStats[t].pts : 0;
           const gp = teamStats[t] ? teamStats[t].p : 0;
+          const bonus = koBonus(t);
           const out = isEliminated(t);
           const through = !out && isQualified(t);   // mutually exclusive, but guard anyway
           const tag = out ? '<span class="out-tag">out</span>'
@@ -656,6 +682,7 @@ function renderLeaderboard() {
             <span class="team-name">${t}${tag}</span>
             <span class="team-gp">${gp} played</span>
             <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
+            ${bonus ? `<span class="ko-bonus-chip">+${bonus}</span>` : ''}
           </div>`;
         }).join('')}
       </div>
@@ -802,46 +829,127 @@ function rankGroup(letter) {
   });
 }
 
-// Resolve a bracket slot to a confirmed team, or a placeholder label.
-function resolveSlot(slot) {
-  if (slot.third) return { label: '3rd ' + slot.third.join('/') };
-  if (slot.p) {
-    const standing = rankGroup(slot.g);
-    if (standing) return { team: standing[slot.p - 1] };
-    return { label: (slot.p === 1 ? 'Winner ' : 'Runner-up ') + slot.g };
+// Flatten every match (R32 + later rounds) into one lookup, each tagged with its stage code.
+const KO_STAGE_OF = { 'Round of 16': 'R16', 'Quarter-finals': 'QF', 'Semi-finals': 'SF', 'Final': 'F' };
+const KO_MATCHES = {};
+KO_R32.forEach(m => { KO_MATCHES[m.m] = { ...m, stage: 'R32' }; });
+Object.entries(KO_LATER).forEach(([name, list]) => list.forEach(m => { KO_MATCHES[m.m] = { ...m, stage: KO_STAGE_OF[name] }; }));
+
+// The updater records the advancing side in `win` (incl. extra-time / penalty shootouts);
+// fall back to the score for older entries.
+const koWinnerOf = k => k.win != null ? k.win : (k.hs > k.as ? k.home : k.hs < k.as ? k.away : null);
+const koPlayed = (a, b, stage) => KO_RESULTS.find(k =>
+  k.done && k.stage === stage && ((k.home === a && k.away === b) || (k.home === b && k.away === a))) || null;
+const koFixture = (team, stage) => KO_RESULTS.find(k => k.stage === stage && (k.home === team || k.away === team)) || null;
+
+const groupSlotTeam = slot => slot.p ? (rankGroup(slot.g) || [])[slot.p - 1] || null : null;
+const slotLabel = slot => slot.third ? '3rd ' + slot.third.join('/') : (slot.p === 1 ? 'Winner ' : 'Runner-up ') + slot.g;
+
+// Resolve a match to its two sides (each a team or a placeholder label) plus any played result.
+// Later rounds resolve recursively from the winners of their feeder matches.
+const _koCache = {};
+function resolveMatch(id) {
+  if (_koCache[id]) return _koCache[id];
+  const def = KO_MATCHES[id];
+  let aTeam, bTeam, aLabel, bLabel;
+
+  if (def.stage === 'R32') {
+    aTeam = groupSlotTeam(def.a); aLabel = slotLabel(def.a);
+    bTeam = groupSlotTeam(def.b); bLabel = slotLabel(def.b);
+    // fill an unknown side (a best-third, or a not-yet-finished group) from the feed's fixture
+    const anchor = aTeam || bTeam;
+    if (anchor && !(aTeam && bTeam)) {
+      const fx = koFixture(anchor, 'R32');
+      if (fx) { const other = fx.home === anchor ? fx.away : fx.home; if (!aTeam) aTeam = other; else bTeam = other; }
+    }
+  } else {
+    aTeam = resolveMatch(def.a).winner; aLabel = 'Winner M' + def.a;
+    bTeam = resolveMatch(def.b).winner; bLabel = 'Winner M' + def.b;
   }
-  return { label: 'Winner M' + slot.from };   // earlier-match winner, decided once it's played
+
+  const played = (aTeam && bTeam) ? koPlayed(aTeam, bTeam, def.stage) : null;
+  let winner = null, ag = null, bg = null;
+  if (played) {
+    winner = koWinnerOf(played);
+    ag = played.home === aTeam ? played.hs : played.as;
+    bg = played.home === aTeam ? played.as : played.hs;
+  }
+  return _koCache[id] = {
+    a: aTeam ? { team: aTeam } : { label: aLabel },
+    b: bTeam ? { team: bTeam } : { label: bLabel },
+    ag, bg, winner, done: !!played,
+  };
 }
 
-function koSlotHTML(ref) {
-  const slot = (typeof ref === 'number') ? {from: ref} : ref;
-  const r = resolveSlot(slot);
-  if (r.team) return `<div class="ko-slot">
-      <span class="ko-flag">${flag(r.team)}</span>
-      <span class="ko-team">${r.team}</span>
-      <span class="ko-owner">${owner(r.team)}</span>
-    </div>`;
-  return `<div class="ko-slot tbd">
-      <span class="ko-flag"></span>
-      <span class="ko-team">${r.label}</span>
+// === Knockout bonus points ===========================================================
+// The eight best third-placed teams — only determinable once all 12 groups are complete.
+function bestThirds() {
+  if (!Object.keys(GROUPS).every(groupComplete)) return [];
+  return Object.keys(GROUPS).map(L => rankGroup(L)[2]).sort((x, y) => {
+    const sx = teamStats[x], sy = teamStats[y];
+    return sy.pts - sx.pts || sy.gd - sx.gd || sy.gf - sx.gf || x.localeCompare(y);
+  }).slice(0, 8);
+}
+// Teams that have DEFINITELY reached the Round of 32: group winners/runners-up, the best
+// thirds (once known), and anyone the feed has actually played an R32 match. Provisional
+// fixtures don't count toward the bonus.
+function r32Qualifiers() {
+  const q = new Set();
+  for (const L of Object.keys(GROUPS)) { const r = rankGroup(L); if (r) { q.add(r[0]); q.add(r[1]); } }
+  bestThirds().forEach(t => q.add(t));
+  for (const k of KO_RESULTS) if (k.stage === 'R32' && k.done) { q.add(k.home); q.add(k.away); }
+  return q;
+}
+const QUALIFIED = r32Qualifiers();
+const wonStage = (team, stage) => KO_RESULTS.some(k => k.done && k.stage === stage && koWinnerOf(k) === team);
+// Cumulative bonus earned so far: +5 reaching R32, then +10/+20/+40/+60 for reaching each
+// further round (= winning the previous one), +100 for winning the final.
+function koBonus(team) {
+  let b = QUALIFIED.has(team) ? 5 : 0;
+  if (wonStage(team, 'R32')) b += 10;
+  if (wonStage(team, 'R16')) b += 20;
+  if (wonStage(team, 'QF'))  b += 40;
+  if (wonStage(team, 'SF'))  b += 60;
+  if (wonStage(team, 'F'))   b += 100;
+  return b;
+}
+
+// === Bracket rendering ===============================================================
+function koSlotHTML(side, isWinner, played, pens) {
+  if (!side.team) return `<div class="ko-slot tbd"><span class="ko-flag"></span><span class="ko-team">${side.label}</span></div>`;
+  const cls = played ? (isWinner ? ' win' : ' lose') : '';
+  const score = side.goals != null
+    ? `<span class="ko-score">${side.goals}${pens && isWinner ? '<sup class="ko-pens">pens</sup>' : ''}</span>` : '';
+  return `<div class="ko-slot${cls}">
+      <span class="ko-flag">${flag(side.team)}</span>
+      <span class="ko-team">${side.team}</span>
+      <span class="ko-owner">${owner(side.team)}</span>${score}
     </div>`;
 }
 
-const koMatchHTML = match =>
-  `<div class="ko-match">${koSlotHTML(match.a)}${koSlotHTML(match.b)}</div>`;
+function koMatchHTML(id) {
+  const r = resolveMatch(id);
+  const a = { ...r.a, goals: r.done ? r.ag : null };
+  const b = { ...r.b, goals: r.done ? r.bg : null };
+  const pens = r.done && r.ag === r.bg;   // level on goals ⇒ decided after extra time / on penalties
+  return `<div class="ko-match${r.done ? ' played' : ''}">
+    ${koSlotHTML(a, r.winner === r.a.team, r.done, pens)}
+    ${koSlotHTML(b, r.winner === r.b.team, r.done, pens)}
+  </div>`;
+}
 
 function renderKnockout() {
   const done = Object.keys(GROUPS).filter(groupComplete).length;
-  document.getElementById('ko-status').innerHTML =
-    `<strong>${done} of 12</strong> groups complete. Group winners and runners-up drop into their ` +
-    `fixed bracket slots as each group finishes; the eight best third-placed teams and every later ` +
-    `round confirm once all groups are done.`;
+  const playedKO = KO_RESULTS.filter(k => k.done).length;
+  document.getElementById('ko-status').innerHTML = playedKO
+    ? `<strong>${playedKO}</strong> knockout ${playedKO === 1 ? 'match' : 'matches'} played. Winners advance automatically and bonus points are added to the leaderboard as teams progress.`
+    : `<strong>${done} of 12</strong> groups complete. Confirmed winners and runners-up are in the bracket; matchups and later rounds fill in as results come through.`;
 
   const rounds = [['Round of 32', KO_R32], ...Object.entries(KO_LATER)];
   document.getElementById('bracket').innerHTML = rounds.map(([name, list]) => `
     <div class="bracket-round">
       <div class="round-label">${name} <span class="count">${list.length} ${list.length === 1 ? 'match' : 'matches'}</span></div>
-      <div class="ko-grid${name === 'Final' ? ' final' : ''}">${list.map(koMatchHTML).join('')}</div>
+      <div class="ko-grid${name === 'Final' ? ' final' : ''}">${list.map(m => koMatchHTML(m.m)).join('')}</div>
     </div>`).join('');
 }
 
