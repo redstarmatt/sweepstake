@@ -320,6 +320,37 @@
     color: var(--muted);
     text-align: center;
   }
+  /* Knockout bracket */
+  .ko-status {
+    font-size: 0.88rem; color: var(--muted); line-height: 1.5;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 18px; box-shadow: var(--shadow);
+  }
+  .ko-status strong { color: var(--navy); }
+  .bracket-round { margin-bottom: 20px; }
+  .round-label {
+    display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px;
+    font-weight: 800; color: var(--navy); font-size: 0.82rem;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .round-label .count {
+    font-weight: 600; color: var(--muted); font-size: 0.72rem;
+    letter-spacing: 0; text-transform: none;
+  }
+  .ko-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 10px; }
+  .ko-grid.final { grid-template-columns: minmax(238px, 320px); justify-content: center; }
+  .ko-match {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow); padding: 4px 12px;
+  }
+  .ko-slot { display: flex; align-items: center; gap: 9px; padding: 7px 0; min-height: 30px; }
+  .ko-slot + .ko-slot { border-top: 1px solid #f1f2f5; }
+  .ko-flag { font-size: 1.15rem; width: 24px; text-align: center; flex-shrink: 0; }
+  .ko-team { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+  .ko-owner { margin-left: auto; font-size: 0.7rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .ko-slot.tbd .ko-team { color: var(--muted); font-style: italic; font-weight: 500; font-size: 0.84rem; }
+  .ko-info.ko-bonus { margin-top: 10px; }
+  .ko-info.ko-bonus p { margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -354,10 +385,10 @@
 
   <section id="knockout" class="tab">
     <h2 class="section-title">🔑 Knockout Stage</h2>
-    <div class="ko-info">
-      <div class="icon">🏟️</div>
-      <h3>Knockout bracket to be confirmed</h3>
-      <p>The knockout rounds begin once all 12 groups are complete. Bonus points will be awarded as players' teams progress:</p>
+    <div id="ko-status" class="ko-status"></div>
+    <div id="bracket"></div>
+    <div class="ko-info ko-bonus">
+      <p>Knockout bonus points &mdash; awarded as players' teams progress:</p>
       <div class="bonus-grid">
         <div class="bonus-item"><div class="stage">Round of 32</div><div class="val">+5</div></div>
         <div class="bonus-item"><div class="stage">Round of 16</div><div class="val">+10</div></div>
@@ -700,6 +731,120 @@ function renderResults() {
   `).join('');
 }
 
+/* ============ KNOCKOUT ============ */
+// 2026 bracket skeleton (official FIFA match numbers). In each slot: p:1 = group winner,
+// p:2 = runner-up; `third` lists the candidate groups for a best-third slot (assigned by
+// FIFA's Annex C table only once all 12 groups finish). Round-of-16 onward reference the
+// winners of earlier matches by number, so they stay as placeholders until the games are played.
+const KO_R32 = [
+  {m:73, a:{p:2,g:'A'}, b:{p:2,g:'B'}},
+  {m:74, a:{p:1,g:'E'}, b:{third:['A','B','C','D','F']}},
+  {m:75, a:{p:1,g:'F'}, b:{p:2,g:'C'}},
+  {m:76, a:{p:1,g:'C'}, b:{p:2,g:'F'}},
+  {m:77, a:{p:1,g:'I'}, b:{third:['C','D','F','G','H']}},
+  {m:78, a:{p:2,g:'E'}, b:{p:2,g:'I'}},
+  {m:79, a:{p:1,g:'A'}, b:{third:['C','E','F','H','I']}},
+  {m:80, a:{p:1,g:'L'}, b:{third:['E','H','I','J','K']}},
+  {m:81, a:{p:1,g:'D'}, b:{third:['B','E','F','I','J']}},
+  {m:82, a:{p:1,g:'G'}, b:{third:['A','E','H','I','J']}},
+  {m:83, a:{p:2,g:'K'}, b:{p:2,g:'L'}},
+  {m:84, a:{p:1,g:'H'}, b:{p:2,g:'J'}},
+  {m:85, a:{p:1,g:'B'}, b:{third:['E','F','G','I','J']}},
+  {m:86, a:{p:1,g:'J'}, b:{p:2,g:'H'}},
+  {m:87, a:{p:1,g:'K'}, b:{third:['D','E','I','J','L']}},
+  {m:88, a:{p:2,g:'D'}, b:{p:2,g:'G'}},
+];
+const KO_LATER = {
+  'Round of 16': [
+    {m:89,a:74,b:77},{m:90,a:73,b:75},{m:91,a:76,b:78},{m:92,a:79,b:80},
+    {m:93,a:83,b:84},{m:94,a:81,b:82},{m:95,a:86,b:88},{m:96,a:85,b:87},
+  ],
+  'Quarter-finals': [{m:97,a:89,b:90},{m:98,a:93,b:94},{m:99,a:91,b:92},{m:100,a:95,b:96}],
+  'Semi-finals': [{m:101,a:97,b:98},{m:102,a:99,b:100}],
+  'Final': [{m:104,a:101,b:102}],
+};
+
+const groupComplete = letter => {
+  const teams = GROUPS[letter];
+  return RESULTS.filter(m => teams.includes(m.home) && teams.includes(m.away)).length === 6;
+};
+
+// Final 1st→4th order for a COMPLETED group, using the 2026 tiebreakers: points, then a
+// head-to-head mini-league among teams level on points (its points, GD, goals), then overall
+// GD and goals. Returns null until the group is finished.
+function rankGroup(letter) {
+  if (!groupComplete(letter)) return null;
+  const teams = GROUPS[letter];
+  const ms = RESULTS.filter(m => teams.includes(m.home) && teams.includes(m.away));
+  const tally = set => {
+    const s = {}; set.forEach(t => s[t] = {pts:0, gd:0, gf:0});
+    for (const m of ms) {
+      if (!set.includes(m.home) || !set.includes(m.away)) continue;
+      const h = s[m.home], a = s[m.away];
+      h.gf += m.hs; h.gd += m.hs - m.as; a.gf += m.as; a.gd += m.as - m.hs;
+      if (m.hs > m.as) h.pts += 3; else if (m.hs < m.as) a.pts += 3; else { h.pts++; a.pts++; }
+    }
+    return s;
+  };
+  const all = tally(teams);
+  return [...teams].sort((x, y) => {
+    if (all[y].pts !== all[x].pts) return all[y].pts - all[x].pts;
+    const tied = teams.filter(t => all[t].pts === all[x].pts);   // teams level with x on points
+    if (tied.length > 1) {
+      const h = tally(tied);
+      if (h[y].pts !== h[x].pts) return h[y].pts - h[x].pts;
+      if (h[y].gd !== h[x].gd) return h[y].gd - h[x].gd;
+      if (h[y].gf !== h[x].gf) return h[y].gf - h[x].gf;
+    }
+    if (all[y].gd !== all[x].gd) return all[y].gd - all[x].gd;
+    if (all[y].gf !== all[x].gf) return all[y].gf - all[x].gf;
+    return x.localeCompare(y);
+  });
+}
+
+// Resolve a bracket slot to a confirmed team, or a placeholder label.
+function resolveSlot(slot) {
+  if (slot.third) return { label: '3rd ' + slot.third.join('/') };
+  if (slot.p) {
+    const standing = rankGroup(slot.g);
+    if (standing) return { team: standing[slot.p - 1] };
+    return { label: (slot.p === 1 ? 'Winner ' : 'Runner-up ') + slot.g };
+  }
+  return { label: 'Winner M' + slot.from };   // earlier-match winner, decided once it's played
+}
+
+function koSlotHTML(ref) {
+  const slot = (typeof ref === 'number') ? {from: ref} : ref;
+  const r = resolveSlot(slot);
+  if (r.team) return `<div class="ko-slot">
+      <span class="ko-flag">${flag(r.team)}</span>
+      <span class="ko-team">${r.team}</span>
+      <span class="ko-owner">${owner(r.team)}</span>
+    </div>`;
+  return `<div class="ko-slot tbd">
+      <span class="ko-flag"></span>
+      <span class="ko-team">${r.label}</span>
+    </div>`;
+}
+
+const koMatchHTML = match =>
+  `<div class="ko-match">${koSlotHTML(match.a)}${koSlotHTML(match.b)}</div>`;
+
+function renderKnockout() {
+  const done = Object.keys(GROUPS).filter(groupComplete).length;
+  document.getElementById('ko-status').innerHTML =
+    `<strong>${done} of 12</strong> groups complete. Group winners and runners-up drop into their ` +
+    `fixed bracket slots as each group finishes; the eight best third-placed teams and every later ` +
+    `round confirm once all groups are done.`;
+
+  const rounds = [['Round of 32', KO_R32], ...Object.entries(KO_LATER)];
+  document.getElementById('bracket').innerHTML = rounds.map(([name, list]) => `
+    <div class="bracket-round">
+      <div class="round-label">${name} <span class="count">${list.length} ${list.length === 1 ? 'match' : 'matches'}</span></div>
+      <div class="ko-grid${name === 'Final' ? ' final' : ''}">${list.map(koMatchHTML).join('')}</div>
+    </div>`).join('');
+}
+
 /* ============ TABS ============ */
 document.getElementById('nav').addEventListener('click', e => {
   const btn = e.target.closest('button');
@@ -712,6 +857,7 @@ document.getElementById('nav').addEventListener('click', e => {
 renderLeaderboard();
 renderGroups();
 renderResults();
+renderKnockout();
 </script>
 </body>
 </html>
