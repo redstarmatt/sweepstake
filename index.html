@@ -697,8 +697,11 @@ function renderLeaderboard() {
           const pts = teamStats[t] ? teamStats[t].pts : 0;
           const gp = teamStats[t] ? teamStats[t].p : 0;
           const bonus = koBonus(t);
-          const out = isEliminated(t);
-          const through = !out && isQualified(t);   // mutually exclusive, but guard anyway
+          // Out = knocked out: lost a bracket tie, or (once the group stage is over) didn't make
+          // the R32. Through = still alive. During the group stage, fall back to the predictive
+          // can't-reach-top-3 / guaranteed-top-2 logic so the tags work as groups play out.
+          const out = KO_LOSERS.has(t) || (ALL_GROUPS_DONE ? !QUALIFIED.has(t) : isEliminated(t));
+          const through = !out && (ALL_GROUPS_DONE ? QUALIFIED.has(t) : isQualified(t));
           const tag = out ? '<span class="out-tag">out</span>'
                     : through ? '<span class="qual-tag">qualified</span>' : '';
           return `<div class="team-row${out ? ' out' : through ? ' through' : ''}">
@@ -914,10 +917,14 @@ function bestThirds() {
     return sy.pts - sx.pts || sy.gd - sx.gd || sy.gf - sx.gf || x.localeCompare(y);
   }).slice(0, 8);
 }
-// Teams that have DEFINITELY reached the Round of 32: group winners/runners-up, the best
-// thirds (once known), and anyone the feed has actually played an R32 match. Provisional
-// fixtures don't count toward the bonus.
+// The 32 teams in the Round of 32. The feed's published bracket is authoritative once it lists
+// the full lineup; before that (group stage still finishing) we compute it from the standings:
+// winners + runners-up + the best thirds known so far, plus anyone who's already played an R32 tie.
+// (Provisional, partly-named fixtures are ignored so the bonus stays conservative mid-group-stage.)
 function r32Qualifiers() {
+  const feed = new Set();
+  for (const k of KO_RESULTS) if (k.stage === 'R32') { feed.add(k.home); feed.add(k.away); }
+  if (feed.size === 32) return feed;
   const q = new Set();
   for (const L of Object.keys(GROUPS)) { const r = rankGroup(L); if (r) { q.add(r[0]); q.add(r[1]); } }
   bestThirds().forEach(t => q.add(t));
@@ -925,6 +932,10 @@ function r32Qualifiers() {
   return q;
 }
 const QUALIFIED = r32Qualifiers();
+const ALL_GROUPS_DONE = Object.keys(GROUPS).every(groupComplete);
+// Teams knocked out in the bracket — the losing side of any played knockout tie.
+const KO_LOSERS = new Set();
+KO_RESULTS.forEach(k => { if (k.done) { const w = koWinnerOf(k); if (w) KO_LOSERS.add(k.home === w ? k.away : k.home); } });
 const wonStage = (team, stage) => KO_RESULTS.some(k => k.done && k.stage === stage && koWinnerOf(k) === team);
 // Cumulative bonus earned so far: +5 reaching R32, then +10/+20/+40/+60 for reaching each
 // further round (= winning the previous one), +100 for winning the final.
