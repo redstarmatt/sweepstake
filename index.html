@@ -366,18 +366,42 @@
     margin-left: 8px; padding: 1px 6px; border-radius: 5px; white-space: nowrap;
     font-size: 0.66rem; font-weight: 800; color: var(--gold-dim); background: rgba(212,168,67,0.16);
   }
+  /* Knockout-phase refresh */
+  .phase {
+    display: inline-block; margin-top: 10px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(212,168,67,0.16); color: var(--gold);
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  }
+  .player-sub { font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .player-sub .max { color: var(--gold-dim); font-weight: 800; }
+  .player-sub.dead { color: #c0392b; }
+  .match.pending .score { background: #e9ebf1; color: var(--muted); }
+  .score-pens { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.02em; margin-left: 2px; }
+  .results-divider {
+    margin: 26px 0 14px; padding-top: 16px; border-top: 1px solid var(--border);
+    font-weight: 800; font-size: 0.8rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .groups-note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 12px 16px; margin-bottom: 16px;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .group-card tr.third td { background: rgba(31,157,85,0.07); }
+  .third-check { color: var(--green); font-weight: 800; }
 </style>
 </head>
 <body>
 <header>
   <div class="header-inner">
     <h1>⚽ World Cup 2026 <span class="gold">Sweepstake</span></h1>
+    <div id="phase" class="phase" hidden></div>
     <div class="updated">Last updated: 2 July 2026</div>
     <nav id="nav">
       <button class="active" data-tab="leaderboard">Leaderboard</button>
-      <button data-tab="groups">Groups</button>
-      <button data-tab="results">Results</button>
       <button data-tab="knockout">Knockout</button>
+      <button data-tab="results">Results</button>
+      <button data-tab="groups">Groups</button>
     </nav>
   </div>
 </header>
@@ -390,6 +414,7 @@
 
   <section id="groups" class="tab">
     <h2 class="section-title">📋 Group Stage</h2>
+    <div id="groups-note"></div>
     <div id="groups-grid" class="groups-grid"></div>
   </section>
 
@@ -674,59 +699,155 @@ function isQualified(team) {
   return counts ? counts.every(a => a <= 1) : false;
 }
 
+/* ============ KNOCKOUT-PHASE HELPERS ============ */
+const STAGE_SEQ = ['R32', 'R16', 'QF', 'SF', 'F'];
+const STAGE_WIN_BONUS = { R32: 10, R16: 20, QF: 40, SF: 60, F: 100 };
+const STAGE_LABEL = { R32: 'Round of 32', R16: 'Round of 16', QF: 'Quarter-finals', SF: 'Semi-finals', '3P': 'Third place play-off', F: 'Final' };
+const STAGE_SIZE = { R32: 16, R16: 8, QF: 4, SF: 2, F: 1 };
+
+const teamAlive = t => QUALIFIED.has(t) && !KO_LOSERS.has(t);
+// next round an alive team plays = first stage it hasn't won yet ('CHAMP' once it wins the final)
+const teamNextStage = t => STAGE_SEQ.find(s => !wonStage(t, s)) || 'CHAMP';
+const teamNextFixture = t => KO_RESULTS.find(k => !k.done && k.stage !== '3P' && (k.home === t || k.away === t)) || null;
+// where a knocked-out team fell: the stage of the tie it lost (null = never made the bracket)
+function teamExitStage(t) {
+  const lost = KO_RESULTS.find(k => k.done && k.stage !== '3P' && (k.home === t || k.away === t) && koWinnerOf(k) && koWinnerOf(k) !== t);
+  return lost ? lost.stage : null;
+}
+// current tournament stage: first knockout round not yet fully played (null during groups)
+function currentStage() {
+  if (!ALL_GROUPS_DONE) return null;
+  return STAGE_SEQ.find(s => KO_RESULTS.filter(k => k.stage === s && k.done).length < STAGE_SIZE[s]) || 'DONE';
+}
+
+// Best-case bonus points a set of teams can still add over the remaining bracket. A DP over the
+// bracket tree: for each match, map every team that could emerge from it to the max points the
+// set banks inside that subtree if it does. Bracket-aware, so two of a player's teams on a
+// collision course are never both credited with the same run. Already-played matches contribute
+// nothing (those bonuses are banked in koBonus) but pin the winner.
+function maxFuturePoints(teamsSet) {
+  const memo = {};
+  const f = id => {
+    if (memo[id]) return memo[id];
+    const def = KO_MATCHES[id], r = resolveMatch(id);
+    let A, B;
+    if (def.stage === 'R32') {
+      A = new Map(r.a.team ? [[r.a.team, 0]] : []);
+      B = new Map(r.b.team ? [[r.b.team, 0]] : []);
+    } else { A = f(def.a); B = f(def.b); }
+    const bestA = A.size ? Math.max(...A.values()) : 0;
+    const bestB = B.size ? Math.max(...B.values()) : 0;
+    const out = new Map();
+    if (r.done) {
+      const t = r.winner;
+      if (t) out.set(t, (A.get(t) ?? B.get(t) ?? 0) + (A.has(t) ? bestB : bestA));
+    } else {
+      const w = STAGE_WIN_BONUS[def.stage];
+      for (const [t, p] of A) out.set(t, p + (teamsSet.has(t) ? w : 0) + bestB);
+      for (const [t, p] of B) {
+        const v = p + (teamsSet.has(t) ? w : 0) + bestA;
+        if (!out.has(t) || v > out.get(t)) out.set(t, v);
+      }
+    }
+    return memo[id] = out;
+  };
+  const top = f(104);   // the final
+  return top.size ? Math.max(...top.values()) : 0;
+}
+
 /* ============ LEADERBOARD ============ */
 function renderLeaderboard() {
   const standings = Object.entries(PLAYERS).map(([name, teams]) => {
     const groupPts = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].pts : 0), 0);
     const bonus = teams.reduce((sum, t) => sum + koBonus(t), 0);
     const played = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].p : 0), 0);
-    return { name, teams, bonus, total: groupPts + bonus, played };
-  }).sort((a, b) => b.total - a.total);
+    const alive = teams.filter(teamAlive).length;
+    const total = groupPts + bonus;
+    const max = ALL_GROUPS_DONE ? total + maxFuturePoints(new Set(teams)) : null;
+    return { name, teams, bonus, total, played, alive, max };
+  }).sort((a, b) => b.total - a.total || (b.max ?? 0) - (a.max ?? 0));
 
   const el = document.getElementById('leaderboard-list');
-  el.innerHTML = standings.map((p, i) => `
+  el.innerHTML = standings.map((p, i) => {
+    const rivalBest = Math.max(...standings.filter(q => q !== p).map(q => q.total));
+    const noHope = p.max != null && p.max < rivalBest;   // can't even tie today's leader
+    const sub = p.max == null ? ''
+      : p.alive === 0 ? `<div class="player-sub dead">No teams left — finishes on ${p.total} pts</div>`
+      : noHope ? `<div class="player-sub dead">Out of the running — max ${p.max} pts</div>`
+      : `<div class="player-sub">Max possible: <span class="max">${p.max} pts</span></div>`;
+    const midCol = ALL_GROUPS_DONE
+      ? `<div class="player-gp">${p.alive}/${p.teams.length}<span>alive</span></div>`
+      : `<div class="player-gp">${p.played}<span>played</span></div>`;
+    return `
     <div class="player-card" onclick="this.classList.toggle('open')">
       <div class="player-head">
         <div class="rank">${i + 1}</div>
-        <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}</div>
-        <div class="player-gp">${p.played}<span>played</span></div>
+        <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}${sub}</div>
+        ${midCol}
         <div class="player-pts">${p.total}<span>pts</span></div>
         <div class="chevron">▼</div>
       </div>
       <div class="teams">
         ${[...p.teams].sort((a, b) => {
+          const da = ALL_GROUPS_DONE && !teamAlive(a) ? 1 : 0;   // alive teams first
+          const db = ALL_GROUPS_DONE && !teamAlive(b) ? 1 : 0;
           const pa = (teamStats[a] ? teamStats[a].pts : 0) + koBonus(a);
           const pb = (teamStats[b] ? teamStats[b].pts : 0) + koBonus(b);
-          return pb - pa || a.localeCompare(b);
-        }).map(t => {
-          const pts = teamStats[t] ? teamStats[t].pts : 0;
-          const gp = teamStats[t] ? teamStats[t].p : 0;
-          const bonus = koBonus(t);
-          // Out = knocked out: lost a bracket tie, or (once the group stage is over) didn't make
-          // the R32. Through = still alive. During the group stage, fall back to the predictive
-          // can't-reach-top-3 / guaranteed-top-2 logic so the tags work as groups play out.
-          const out = KO_LOSERS.has(t) || (ALL_GROUPS_DONE ? !QUALIFIED.has(t) : isEliminated(t));
-          const through = !out && (ALL_GROUPS_DONE ? QUALIFIED.has(t) : isQualified(t));
-          const tag = out ? '<span class="out-tag">out</span>'
-                    : through ? '<span class="qual-tag">qualified</span>' : '';
-          return `<div class="team-row${out ? ' out' : through ? ' through' : ''}">
-            <span class="team-flag">${flag(t)}</span>
-            <span class="team-name">${t}${tag}</span>
-            <span class="team-gp">${gp} played</span>
-            <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
-            ${bonus ? `<span class="ko-bonus-chip">+${bonus}</span>` : ''}
-          </div>`;
-        }).join('')}
+          return da - db || pb - pa || a.localeCompare(b);
+        }).map(teamRowHTML).join('')}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+function teamRowHTML(t) {
+  const pts = teamStats[t] ? teamStats[t].pts : 0;
+  const gp = teamStats[t] ? teamStats[t].p : 0;
+  const bonus = koBonus(t);
+  // Out = knocked out: lost a bracket tie, or (once the group stage is over) didn't make
+  // the R32. During the group stage, fall back to the predictive can't-reach-top-3 /
+  // guaranteed-top-2 logic so the tags work as groups play out.
+  const out = KO_LOSERS.has(t) || (ALL_GROUPS_DONE ? !QUALIFIED.has(t) : isEliminated(t));
+  const alive = !out && (ALL_GROUPS_DONE ? QUALIFIED.has(t) : isQualified(t));
+  let tag = '', info = `${gp} played`;
+  if (out) {
+    tag = '<span class="out-tag">out</span>';
+    if (ALL_GROUPS_DONE) {
+      const ex = teamExitStage(t);
+      info = ex ? `exited ${ex}` : 'exited groups';
+    }
+  } else if (ALL_GROUPS_DONE) {
+    const ns = teamNextStage(t);
+    if (ns === 'CHAMP') { tag = '<span class="qual-tag">🏆 winner</span>'; info = 'world champions'; }
+    else {
+      tag = `<span class="qual-tag">in ${ns}</span>`;
+      const fx = teamNextFixture(t);
+      const opp = fx ? (fx.home === t ? fx.away : fx.home) : null;
+      info = opp ? `next: ${flag(opp)} ${opp}` : 'opponent TBD';
+    }
+  } else if (alive) {
+    tag = '<span class="qual-tag">qualified</span>';
+  }
+  return `<div class="team-row${out ? ' out' : alive ? ' through' : ''}">
+    <span class="team-flag">${flag(t)}</span>
+    <span class="team-name">${t}${tag}</span>
+    <span class="team-gp">${info}</span>
+    <span class="team-pts ${pts === 0 ? 'zero' : ''}">${pts} pts</span>
+    ${bonus ? `<span class="ko-bonus-chip">+${bonus}</span>` : ''}
+  </div>`;
 }
 
 /* ============ GROUPS ============ */
 function renderGroups() {
+  const thirds = new Set(bestThirds());
+  const note = document.getElementById('groups-note');
+  if (note) note.innerHTML = ALL_GROUPS_DONE
+    ? `<div class="groups-note">Group stage complete — final tables. The top two in each group advanced, along with the eight best third-placed teams (<span class="third-check">✓</span>).</div>`
+    : '';
   const el = document.getElementById('groups-grid');
   el.innerHTML = Object.entries(GROUPS).map(([letter, teams]) => {
-    const sorted = [...teams].sort((a, b) => {
+    // final head-to-head ranking once the group is done; live points/GD sort while it plays out
+    const sorted = rankGroup(letter) || [...teams].sort((a, b) => {
       const sa = teamStats[a], sb = teamStats[b];
       return sb.pts - sa.pts || sb.gd - sa.gd || sb.gf - sa.gf || a.localeCompare(b);
     });
@@ -744,8 +865,9 @@ function renderGroups() {
           ${sorted.map((t, idx) => {
             const s = teamStats[t];
             const gd = s.gd > 0 ? '+' + s.gd : s.gd;
-            return `<tr class="${idx < 2 ? 'qual' : ''}">
-              <td class="team-col"><span class="cell"><span class="mini-flag">${flag(t)}</span><span class="team-lines"><span class="team-label">${t}</span><span class="team-owner">${owner(t)}</span></span></span></td>
+            const third = idx === 2 && thirds.has(t);
+            return `<tr class="${idx < 2 ? 'qual' : third ? 'third' : ''}">
+              <td class="team-col"><span class="cell"><span class="mini-flag">${flag(t)}</span><span class="team-lines"><span class="team-label">${t}${third ? ' <span class="third-check">✓</span>' : ''}</span><span class="team-owner">${owner(t)}</span></span></span></td>
               <td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${gd}</td>
               <td class="pts-col">${s.pts}</td>
             </tr>`;
@@ -757,12 +879,54 @@ function renderGroups() {
 }
 
 /* ============ RESULTS ============ */
+// One knockout tie as a result card: stage tag, winner in green, "v" for unplayed fixtures,
+// and a pens marker when a tie finished level but was decided in a shootout.
+function koMatchCard(k) {
+  const w = k.done ? koWinnerOf(k) : null;
+  const pens = k.done && k.hs === k.as && w;
+  return `<div class="match${k.done ? '' : ' pending'}">
+    <span class="grp-tag">${k.stage}</span>
+    <div class="side home">
+      <span class="txt">
+        <span class="nm ${w === k.home ? 'winner' : ''}">${k.home}</span>
+        <span class="owner">${owner(k.home)}</span>
+      </span>
+      <span class="fl">${flag(k.home)}</span>
+    </div>
+    <span class="score">${k.done ? `${k.hs} - ${k.as}` : 'v'}${pens ? '<sup class="score-pens">pens</sup>' : ''}</span>
+    <div class="side away">
+      <span class="fl">${flag(k.away)}</span>
+      <span class="txt">
+        <span class="nm ${w === k.away ? 'winner' : ''}">${k.away}</span>
+        <span class="owner">${owner(k.away)}</span>
+      </span>
+    </div>
+  </div>`;
+}
+
 function renderResults() {
+  let html = '';
+
+  // Knockout stage first: the fixtures still to come, then played rounds latest-first.
+  if (ALL_GROUPS_DONE && KO_RESULTS.length) {
+    const pending = KO_RESULTS.filter(k => !k.done);
+    if (pending.length) {
+      html += `<div class="date-group"><div class="date-label">⏳ Still to play</div>${pending.map(koMatchCard).join('')}</div>`;
+    }
+    for (const s of ['F', '3P', 'SF', 'QF', 'R16', 'R32']) {
+      const played = KO_RESULTS.filter(k => k.stage === s && k.done);
+      if (played.length) {
+        html += `<div class="date-group"><div class="date-label">${STAGE_LABEL[s]}</div>${played.map(koMatchCard).join('')}</div>`;
+      }
+    }
+    html += `<div class="results-divider">Group stage</div>`;
+  }
+
   const byDate = {};
   RESULTS.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
 
   const el = document.getElementById('results-list');
-  el.innerHTML = Object.entries(byDate).map(([date, matches]) => `
+  el.innerHTML = html + Object.entries(byDate).map(([date, matches]) => `
     <div class="date-group">
       <div class="date-label">${date}</div>
       ${matches.map(m => {
@@ -946,11 +1110,7 @@ const wonStage = (team, stage) => KO_RESULTS.some(k => k.done && k.stage === sta
 // further round (= winning the previous one), +100 for winning the final.
 function koBonus(team) {
   let b = QUALIFIED.has(team) ? 5 : 0;
-  if (wonStage(team, 'R32')) b += 10;
-  if (wonStage(team, 'R16')) b += 20;
-  if (wonStage(team, 'QF'))  b += 40;
-  if (wonStage(team, 'SF'))  b += 60;
-  if (wonStage(team, 'F'))   b += 100;
+  for (const s of STAGE_SEQ) if (wonStage(team, s)) b += STAGE_WIN_BONUS[s];
   return b;
 }
 
@@ -979,11 +1139,22 @@ function koMatchHTML(id) {
 }
 
 function renderKnockout() {
-  const done = Object.keys(GROUPS).filter(groupComplete).length;
-  const playedKO = KO_RESULTS.filter(k => k.done).length;
-  document.getElementById('ko-status').innerHTML = playedKO
-    ? `<strong>${playedKO}</strong> knockout ${playedKO === 1 ? 'match' : 'matches'} played. Winners advance automatically and bonus points are added to the leaderboard as teams progress.`
-    : `<strong>${done} of 12</strong> groups complete. Confirmed winners and runners-up are in the bracket; matchups and later rounds fill in as results come through.`;
+  const statusEl = document.getElementById('ko-status');
+  const stage = currentStage();
+  if (!stage) {
+    const done = Object.keys(GROUPS).filter(groupComplete).length;
+    statusEl.innerHTML = `<strong>${done} of 12</strong> groups complete. Confirmed winners and runners-up are in the bracket; matchups and later rounds fill in as results come through.`;
+  } else if (stage === 'DONE') {
+    const fin = KO_RESULTS.find(k => k.stage === 'F' && k.done);
+    const champ = fin ? koWinnerOf(fin) : null;
+    statusEl.innerHTML = champ
+      ? `🏆 <strong>${champ}</strong> are world champions — that's a wrap. Final sweepstake standings are on the leaderboard.`
+      : `Tournament complete. Final sweepstake standings are on the leaderboard.`;
+  } else {
+    const played = KO_RESULTS.filter(k => k.stage === stage && k.done).length;
+    const alive = [...QUALIFIED].filter(t => !KO_LOSERS.has(t)).length;
+    statusEl.innerHTML = `<strong>${STAGE_LABEL[stage]}</strong> in progress — <strong>${played} of ${STAGE_SIZE[stage]}</strong> ties played, <strong>${alive}</strong> teams still standing. Bonus points bank automatically as teams advance.`;
+  }
 
   const rounds = [['Round of 32', KO_R32], ...Object.entries(KO_LATER)];
   document.getElementById('bracket').innerHTML = rounds.map(([name, list]) => `
@@ -1002,6 +1173,13 @@ document.getElementById('nav').addEventListener('click', e => {
 });
 
 /* ============ INIT ============ */
+(function setPhase() {
+  const el = document.getElementById('phase');
+  if (!el) return;
+  const s = currentStage();
+  el.textContent = !s ? 'Group stage' : s === 'DONE' ? '🏆 Tournament complete' : `Knockout · ${STAGE_LABEL[s]}`;
+  el.hidden = false;
+})();
 renderLeaderboard();
 renderGroups();
 renderResults();
