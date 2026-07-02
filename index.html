@@ -372,9 +372,6 @@
     background: rgba(212,168,67,0.16); color: var(--gold);
     font-size: 0.7rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
   }
-  .player-sub { font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-top: 2px; }
-  .player-sub .max { color: var(--gold-dim); font-weight: 800; }
-  .player-sub.dead { color: #c0392b; }
   .match.pending .score { background: #e9ebf1; color: var(--muted); }
   .score-pens { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.02em; margin-left: 2px; }
   .results-divider {
@@ -720,41 +717,6 @@ function currentStage() {
   return STAGE_SEQ.find(s => KO_RESULTS.filter(k => k.stage === s && k.done).length < STAGE_SIZE[s]) || 'DONE';
 }
 
-// Best-case bonus points a set of teams can still add over the remaining bracket. A DP over the
-// bracket tree: for each match, map every team that could emerge from it to the max points the
-// set banks inside that subtree if it does. Bracket-aware, so two of a player's teams on a
-// collision course are never both credited with the same run. Already-played matches contribute
-// nothing (those bonuses are banked in koBonus) but pin the winner.
-function maxFuturePoints(teamsSet) {
-  const memo = {};
-  const f = id => {
-    if (memo[id]) return memo[id];
-    const def = KO_MATCHES[id], r = resolveMatch(id);
-    let A, B;
-    if (def.stage === 'R32') {
-      A = new Map(r.a.team ? [[r.a.team, 0]] : []);
-      B = new Map(r.b.team ? [[r.b.team, 0]] : []);
-    } else { A = f(def.a); B = f(def.b); }
-    const bestA = A.size ? Math.max(...A.values()) : 0;
-    const bestB = B.size ? Math.max(...B.values()) : 0;
-    const out = new Map();
-    if (r.done) {
-      const t = r.winner;
-      if (t) out.set(t, (A.get(t) ?? B.get(t) ?? 0) + (A.has(t) ? bestB : bestA));
-    } else {
-      const w = STAGE_WIN_BONUS[def.stage];
-      for (const [t, p] of A) out.set(t, p + (teamsSet.has(t) ? w : 0) + bestB);
-      for (const [t, p] of B) {
-        const v = p + (teamsSet.has(t) ? w : 0) + bestA;
-        if (!out.has(t) || v > out.get(t)) out.set(t, v);
-      }
-    }
-    return memo[id] = out;
-  };
-  const top = f(104);   // the final
-  return top.size ? Math.max(...top.values()) : 0;
-}
-
 /* ============ LEADERBOARD ============ */
 function renderLeaderboard() {
   const standings = Object.entries(PLAYERS).map(([name, teams]) => {
@@ -762,19 +724,11 @@ function renderLeaderboard() {
     const bonus = teams.reduce((sum, t) => sum + koBonus(t), 0);
     const played = teams.reduce((sum, t) => sum + (teamStats[t] ? teamStats[t].p : 0), 0);
     const alive = teams.filter(teamAlive).length;
-    const total = groupPts + bonus;
-    const max = ALL_GROUPS_DONE ? total + maxFuturePoints(new Set(teams)) : null;
-    return { name, teams, bonus, total, played, alive, max };
-  }).sort((a, b) => b.total - a.total || (b.max ?? 0) - (a.max ?? 0));
+    return { name, teams, bonus, total: groupPts + bonus, played, alive };
+  }).sort((a, b) => b.total - a.total);
 
   const el = document.getElementById('leaderboard-list');
   el.innerHTML = standings.map((p, i) => {
-    const rivalBest = Math.max(...standings.filter(q => q !== p).map(q => q.total));
-    const noHope = p.max != null && p.max < rivalBest;   // can't even tie today's leader
-    const sub = p.max == null ? ''
-      : p.alive === 0 ? `<div class="player-sub dead">No teams left — finishes on ${p.total} pts</div>`
-      : noHope ? `<div class="player-sub dead">Out of the running — max ${p.max} pts</div>`
-      : `<div class="player-sub">Max possible: <span class="max">${p.max} pts</span></div>`;
     const midCol = ALL_GROUPS_DONE
       ? `<div class="player-gp">${p.alive}/${p.teams.length}<span>alive</span></div>`
       : `<div class="player-gp">${p.played}<span>played</span></div>`;
@@ -782,7 +736,7 @@ function renderLeaderboard() {
     <div class="player-card" onclick="this.classList.toggle('open')">
       <div class="player-head">
         <div class="rank">${i + 1}</div>
-        <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}${sub}</div>
+        <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}</div>
         ${midCol}
         <div class="player-pts">${p.total}<span>pts</span></div>
         <div class="chevron">▼</div>
