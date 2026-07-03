@@ -171,6 +171,40 @@
   .team-pts { font-weight: 700; color: var(--navy); margin-left: 12px; min-width: 44px; text-align: right; }
   .team-pts.zero { color: var(--muted); font-weight: 500; }
 
+  /* Daily scores */
+  .daily-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px 14px;
+    margin-bottom: 20px;
+  }
+  .daily-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .daily-mid { flex: 1; text-align: center; }
+  .daily-title { font-weight: 800; font-size: 0.95rem; }
+  .daily-sub { font-size: 0.74rem; color: var(--muted); font-weight: 600; margin-top: 1px; }
+  .day-nav {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    width: 32px; height: 32px; font-size: 1.1rem; line-height: 1; cursor: pointer;
+    color: var(--text); flex-shrink: 0; font-family: inherit;
+  }
+  .day-nav:disabled { opacity: 0.3; cursor: default; }
+  .daily-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 0.85rem; }
+  .d-name { width: 74px; font-weight: 600; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d-bar { flex: 1; height: 8px; background: #eef0f4; border-radius: 99px; overflow: hidden; }
+  .d-bar > div { height: 100%; background: var(--gold); border-radius: 99px; }
+  .d-pts { width: 40px; text-align: right; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .d-pts.zero { color: var(--muted); font-weight: 600; }
+  .d-cmp { width: 122px; text-align: right; font-size: 0.7rem; color: var(--muted); font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+  .d-cmp.best { color: var(--gold-dim); font-weight: 800; }
+  .daily-note { margin-top: 10px; font-size: 0.72rem; color: var(--muted); text-align: center; }
+  @media (max-width: 480px) { .d-bar { display: none; } }
+  /* Rank movement vs the previous match day */
+  .rank .mv { display: block; font-size: 0.6rem; font-weight: 800; line-height: 1.1; }
+  .mv.up { color: var(--green); }
+  .mv.down { color: #c0392b; }
+
   /* Groups */
   .groups-grid {
     display: grid;
@@ -405,6 +439,7 @@
 
 <main>
   <section id="leaderboard" class="tab active">
+    <div id="daily-recap"></div>
     <h2 class="section-title">🏆 Standings</h2>
     <div id="leaderboard-list"></div>
   </section>
@@ -547,20 +582,20 @@ const RESULTS = [
 const KO_RESULTS = [
   {stage:"R32", home:"Argentina", away:"Cape Verde", hs:0, as:0, done:false},
   {stage:"R32", home:"Australia", away:"Egypt", hs:0, as:0, done:false},
-  {stage:"R32", home:"Belgium", away:"Senegal", hs:3, as:2, done:true, win:"Belgium"},
-  {stage:"R32", home:"Brazil", away:"Japan", hs:2, as:1, done:true, win:"Brazil"},
+  {stage:"R32", date:"Jul 1", home:"Belgium", away:"Senegal", hs:3, as:2, done:true, win:"Belgium"},
+  {stage:"R32", date:"Jun 29", home:"Brazil", away:"Japan", hs:2, as:1, done:true, win:"Brazil"},
   {stage:"R32", home:"Colombia", away:"Ghana", hs:0, as:0, done:false},
-  {stage:"R32", home:"Côte d'Ivoire", away:"Norway", hs:1, as:2, done:true, win:"Norway"},
-  {stage:"R32", home:"England", away:"DR Congo", hs:2, as:1, done:true, win:"England"},
-  {stage:"R32", home:"France", away:"Sweden", hs:3, as:0, done:true, win:"France"},
-  {stage:"R32", home:"Germany", away:"Paraguay", hs:1, as:1, done:true, win:"Paraguay"},
-  {stage:"R32", home:"Mexico", away:"Ecuador", hs:2, as:0, done:true, win:"Mexico"},
-  {stage:"R32", home:"Netherlands", away:"Morocco", hs:1, as:1, done:true, win:"Morocco"},
-  {stage:"R32", home:"Portugal", away:"Croatia", hs:2, as:1, done:true, win:"Portugal"},
-  {stage:"R32", home:"South Africa", away:"Canada", hs:0, as:1, done:true, win:"Canada"},
-  {stage:"R32", home:"Spain", away:"Austria", hs:3, as:0, done:true, win:"Spain"},
-  {stage:"R32", home:"Switzerland", away:"Algeria", hs:2, as:0, done:true, win:"Switzerland"},
-  {stage:"R32", home:"USA", away:"Bosnia &amp; Herzegovina", hs:2, as:0, done:true, win:"USA"},
+  {stage:"R32", date:"Jun 30", home:"Côte d'Ivoire", away:"Norway", hs:1, as:2, done:true, win:"Norway"},
+  {stage:"R32", date:"Jul 1", home:"England", away:"DR Congo", hs:2, as:1, done:true, win:"England"},
+  {stage:"R32", date:"Jun 30", home:"France", away:"Sweden", hs:3, as:0, done:true, win:"France"},
+  {stage:"R32", date:"Jun 29", home:"Germany", away:"Paraguay", hs:1, as:1, done:true, win:"Paraguay"},
+  {stage:"R32", date:"Jun 30", home:"Mexico", away:"Ecuador", hs:2, as:0, done:true, win:"Mexico"},
+  {stage:"R32", date:"Jun 29", home:"Netherlands", away:"Morocco", hs:1, as:1, done:true, win:"Morocco"},
+  {stage:"R32", date:"Jul 2", home:"Portugal", away:"Croatia", hs:2, as:1, done:true, win:"Portugal"},
+  {stage:"R32", date:"Jun 28", home:"South Africa", away:"Canada", hs:0, as:1, done:true, win:"Canada"},
+  {stage:"R32", date:"Jul 2", home:"Spain", away:"Austria", hs:3, as:0, done:true, win:"Spain"},
+  {stage:"R32", date:"Jul 2", home:"Switzerland", away:"Algeria", hs:2, as:0, done:true, win:"Switzerland"},
+  {stage:"R32", date:"Jul 1", home:"USA", away:"Bosnia &amp; Herzegovina", hs:2, as:0, done:true, win:"USA"},
   {stage:"R16", home:"Brazil", away:"Norway", hs:0, as:0, done:false},
   {stage:"R16", home:"Canada", away:"Morocco", hs:0, as:0, done:false},
   {stage:"R16", home:"Mexico", away:"England", hs:0, as:0, done:false},
@@ -727,15 +762,25 @@ function renderLeaderboard() {
     return { name, teams, bonus, total: groupPts + bonus, played, alive };
   }).sort((a, b) => b.total - a.total);
 
+  // Rank movement vs before the latest match day's points landed (▲/▼ next to the rank).
+  const latestDay = MATCH_DAYS[MATCH_DAYS.length - 1];
+  const latestPts = latestDay ? DAILY[latestDay].pts : {};
+  const prevRank = {};
+  [...standings].sort((a, b) => (b.total - (latestPts[b.name] || 0)) - (a.total - (latestPts[a.name] || 0)))
+    .forEach((p, i) => { prevRank[p.name] = i + 1; });
+
   const el = document.getElementById('leaderboard-list');
   el.innerHTML = standings.map((p, i) => {
     const midCol = ALL_GROUPS_DONE
       ? `<div class="player-gp">${p.alive}/${p.teams.length}<span>alive</span></div>`
       : `<div class="player-gp">${p.played}<span>played</span></div>`;
+    const mv = prevRank[p.name] - (i + 1);
+    const mvHtml = mv > 0 ? `<span class="mv up" title="Up ${mv} on ${latestDay}">▲${mv}</span>`
+                 : mv < 0 ? `<span class="mv down" title="Down ${-mv} on ${latestDay}">▼${-mv}</span>` : '';
     return `
     <div class="player-card" onclick="this.classList.toggle('open')">
       <div class="player-head">
-        <div class="rank">${i + 1}</div>
+        <div class="rank">${i + 1}${mvHtml}</div>
         <div class="player-name">${p.name}${p.bonus ? `<span class="player-bonus">+${p.bonus} KO</span>` : ''}</div>
         ${midCol}
         <div class="player-pts">${p.total}<span>pts</span></div>
@@ -1068,6 +1113,73 @@ function koBonus(team) {
   return b;
 }
 
+/* ============ DAILY SCORES ============ */
+// Points banked by each player on each match day: group results on their date, knockout
+// stage-win bonuses on the tie's date, and the +5 reached-the-R32 bonuses on the group
+// stage's final day (when the full Round-of-32 line-up became official). KO ties without
+// a date (older data before dates were recorded) can't be placed on a day, so they're
+// left out of the daily view — they still count in the overall standings.
+const DAY_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dayNum = d => { const [mo, da] = d.split(' '); return DAY_MONTHS.indexOf(mo) * 100 + +da; };
+const LAST_GROUP_DATE = RESULTS.reduce((m, r) => dayNum(r.date) > dayNum(m) ? r.date : m, RESULTS[0].date);
+
+const DAILY = {};
+const dayOf = date => DAILY[date] || (DAILY[date] = { matches: 0, pts: {} });
+const addDayPts = (day, player, pts) => { if (player && pts) day.pts[player] = (day.pts[player] || 0) + pts; };
+RESULTS.forEach(m => {
+  const d = dayOf(m.date); d.matches++;
+  addDayPts(d, owner(m.home), m.hs > m.as ? 3 : m.hs === m.as ? 1 : 0);
+  addDayPts(d, owner(m.away), m.as > m.hs ? 3 : m.hs === m.as ? 1 : 0);
+});
+KO_RESULTS.forEach(k => {
+  if (!k.done || !k.date) return;
+  const d = dayOf(k.date); d.matches++;
+  const w = koWinnerOf(k);
+  if (w && STAGE_WIN_BONUS[k.stage]) addDayPts(d, owner(w), STAGE_WIN_BONUS[k.stage]);
+});
+if (ALL_GROUPS_DONE) QUALIFIED.forEach(t => addDayPts(dayOf(LAST_GROUP_DATE), owner(t), 5));
+const MATCH_DAYS = Object.keys(DAILY).sort((a, b) => dayNum(a) - dayNum(b));
+
+let dayIdx = MATCH_DAYS.length - 1;
+function renderDaily() {
+  const el = document.getElementById('daily-recap');
+  if (!el || !MATCH_DAYS.length) return;
+  const date = MATCH_DAYS[dayIdx];
+  const day = DAILY[date];
+  const rows = Object.keys(PLAYERS).map(name => ({ name, pts: day.pts[name] || 0 }))
+    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
+  const max = rows[0].pts;
+  const avg = rows.reduce((s, r) => s + r.pts, 0) / rows.length;
+  const isLatest = dayIdx === MATCH_DAYS.length - 1;
+  el.innerHTML = `
+  <div class="daily-card">
+    <div class="daily-head">
+      <button class="day-nav" id="day-prev" ${dayIdx === 0 ? 'disabled' : ''} aria-label="Previous match day">‹</button>
+      <div class="daily-mid">
+        <div class="daily-title">📅 Daily scores — ${date}${isLatest ? ' (latest)' : ''}</div>
+        <div class="daily-sub">${day.matches} match${day.matches === 1 ? '' : 'es'} · day average +${(+avg.toFixed(1))} pts</div>
+      </div>
+      <button class="day-nav" id="day-next" ${isLatest ? 'disabled' : ''} aria-label="Next match day">›</button>
+    </div>
+    ${rows.map(r => {
+      const lower = rows.filter(o => o.pts < r.pts).length;
+      const best = r.pts === max && max > 0;
+      const cmp = best ? '🥇 best of the day'
+        : r.pts === 0 ? 'no points this day'
+        : `better than ${Math.round(100 * lower / (rows.length - 1))}% of players`;
+      return `<div class="daily-row">
+        <span class="d-name">${r.name}</span>
+        <div class="d-bar"><div style="width:${max ? Math.round(100 * r.pts / max) : 0}%"></div></div>
+        <span class="d-pts${r.pts ? '' : ' zero'}">+${r.pts}</span>
+        <span class="d-cmp${best ? ' best' : ''}">${cmp}</span>
+      </div>`;
+    }).join('')}
+    ${date === LAST_GROUP_DATE && ALL_GROUPS_DONE ? '<div class="daily-note">Includes the +5 bonus for every team that reached the Round of 32.</div>' : ''}
+  </div>`;
+  document.getElementById('day-prev').onclick = () => { if (dayIdx > 0) { dayIdx--; renderDaily(); } };
+  document.getElementById('day-next').onclick = () => { if (dayIdx < MATCH_DAYS.length - 1) { dayIdx++; renderDaily(); } };
+}
+
 // === Bracket rendering ===============================================================
 function koSlotHTML(side, isWinner, played, pens) {
   if (!side.team) return `<div class="ko-slot tbd"><span class="ko-flag"></span><span class="ko-team">${side.label}</span></div>`;
@@ -1134,6 +1246,7 @@ document.getElementById('nav').addEventListener('click', e => {
   el.textContent = !s ? 'Group stage' : s === 'DONE' ? '🏆 Tournament complete' : `Knockout · ${STAGE_LABEL[s]}`;
   el.hidden = false;
 })();
+renderDaily();
 renderLeaderboard();
 renderGroups();
 renderResults();
