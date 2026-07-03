@@ -130,7 +130,9 @@ async function getLiveKO() {
     const done = String(g.finished).toUpperCase() === 'TRUE';
     const hs = done ? +g.home_score : 0, as = done ? +g.away_score : 0;
     const win = done ? (hs > as ? home : as > hs ? away : null) : null;  // live feed carries no shootout data
-    out.push({ stage, home, away, hs, as, done, win });
+    const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(g.local_date || '');
+    const date = m ? `${MON[+m[1] - 1]} ${+m[2]}` : null;
+    out.push({ stage, home, away, hs, as, done, win, date });
   }
   return out;
 }
@@ -153,7 +155,9 @@ async function getOpenKO() {
       win = hs > as ? home : as > hs ? away : null;
       if (!win && Array.isArray(s.p)) win = s.p[0] > s.p[1] ? home : s.p[1] > s.p[0] ? away : null;  // shootout
     }
-    out.push({ stage, home, away, hs, as, done, win });
+    const mm = /(\d{4})-(\d{2})-(\d{2})/.exec(m.date || '');
+    const date = mm ? `${MON[+mm[2] - 1]} ${+mm[3]}` : null;
+    out.push({ stage, home, away, hs, as, done, win, date });
   }
   return out;
 }
@@ -203,21 +207,29 @@ const koRank = k => (k.done ? 2 : 0) + (k.win != null ? 1 : 0);   // prefer play
 const koMap = new Map();
 for (const g of [...openKO, ...liveKO]) {              // live iterated last → wins equal-rank ties
   const prev = koMap.get(koKey(g));
-  if (!prev || koRank(g) >= koRank(prev)) koMap.set(koKey(g), g);
+  if (!prev || koRank(g) >= koRank(prev)) koMap.set(koKey(g), { ...g, date: g.date ?? prev?.date ?? null });
+}
+// keep a previously-recorded date if the winning feed has none this run
+for (const k of KO_EXISTING) {
+  const cur = koMap.get(koKey(k));
+  if (cur && !cur.date && k.date) cur.date = k.date;
 }
 const koList = [...koMap.values()].sort((a, b) =>
   STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage) || a.home.localeCompare(b.home));
 // only overwrite existing KO data if the feeds returned some (don't wipe on a transient glitch)
-const koSig = arr => JSON.stringify(arr.map(k => [k.stage, k.home, k.away, k.hs, k.as, k.done, k.win ?? null]));
+const koSig = arr => JSON.stringify(arr.map(k => [k.stage, k.home, k.away, k.hs, k.as, k.done, k.win ?? null, k.date ?? null]));
 const koChanged = koList.length > 0 && koSig(koList) !== koSig(KO_EXISTING);
 
 if (!added.length && !koChanged) { console.log('No new results.'); process.exit(0); }
 
 /* ---------- rewrite the file (later block first, so the earlier block's offsets stay valid) ---------- */
 if (koChanged) {
-  const koLines = koList.map(k => k.done
-    ? `  {stage:${JSON.stringify(k.stage)}, home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:true, win:${JSON.stringify(k.win)}}`
-    : `  {stage:${JSON.stringify(k.stage)}, home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:false}`);
+  const koLines = koList.map(k => {
+    const date = k.date ? `date:${JSON.stringify(k.date)}, ` : '';
+    return k.done
+      ? `  {stage:${JSON.stringify(k.stage)}, ${date}home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:true, win:${JSON.stringify(k.win)}}`
+      : `  {stage:${JSON.stringify(k.stage)}, ${date}home:${JSON.stringify(k.home)}, away:${JSON.stringify(k.away)}, hs:${k.hs}, as:${k.as}, done:false}`;
+  });
   html = html.slice(0, koBlock.start) + '[\n' + koLines.join(',\n') + '\n]' + html.slice(koBlock.end);
 }
 if (added.length) {
