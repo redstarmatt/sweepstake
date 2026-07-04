@@ -1113,12 +1113,21 @@ function renderKnockout() {
     statusEl.innerHTML = `<strong>${STAGE_LABEL[stage]}</strong> in progress — <strong>${played} of ${STAGE_SIZE[stage]}</strong> ties played, <strong>${alive}</strong> teams still standing. Bonus points bank automatically as teams advance.`;
   }
 
+  // Live and upcoming rounds first; fully-played rounds drop into an archive below,
+  // latest first, so the current round always sits at the top of the tab.
+  const ROUND_CODE = { 'Round of 32': 'R32', ...KO_STAGE_OF };
+  const roundDone = name => KO_RESULTS.filter(k => k.stage === ROUND_CODE[name] && k.done).length >= STAGE_SIZE[ROUND_CODE[name]];
   const rounds = [['Round of 32', KO_R32], ...Object.entries(KO_LATER)];
-  document.getElementById('bracket').innerHTML = rounds.map(([name, list]) => `
+  const roundHTML = ([name, list]) => `
     <div class="bracket-round">
       <div class="round-label">${name} <span class="count">${list.length} ${list.length === 1 ? 'match' : 'matches'}</span></div>
       <div class="ko-grid${name === 'Final' ? ' final' : ''}">${list.map(m => koMatchHTML(m.m)).join('')}</div>
-    </div>`).join('');
+    </div>`;
+  const current = rounds.filter(r => !roundDone(r[0]));
+  const completed = rounds.filter(r => roundDone(r[0])).reverse();
+  document.getElementById('bracket').innerHTML =
+    current.map(roundHTML).join('') +
+    (completed.length ? `<div class="results-divider">Completed rounds</div>` + completed.map(roundHTML).join('') : '');
 }
 
 /* ============ TABS ============ */
