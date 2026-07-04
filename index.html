@@ -393,7 +393,7 @@
   <div class="header-inner">
     <h1>⚽ World Cup 2026 <span class="gold">Sweepstake</span></h1>
     <div id="phase" class="phase" hidden></div>
-    <div class="updated">Last updated: 3 July 2026</div>
+    <div class="updated">Last updated: 4 July 2026</div>
     <nav id="nav">
       <button class="active" data-tab="leaderboard">Leaderboard</button>
       <button data-tab="knockout">Knockout</button>
@@ -545,7 +545,7 @@ const RESULTS = [
 // Knockout matches — auto-populated by scripts/update-results.mjs from the live feeds.
 // stage ∈ R32/R16/QF/SF/3P/F. done:false = fixtured but not yet played (scores ignored).
 const KO_RESULTS = [
-  {stage:"R32", home:"Argentina", away:"Cape Verde", hs:0, as:0, done:false},
+  {stage:"R32", home:"Argentina", away:"Cape Verde", hs:3, as:2, done:true, win:"Argentina"},
   {stage:"R32", home:"Australia", away:"Egypt", hs:1, as:1, done:true, win:"Egypt"},
   {stage:"R32", home:"Belgium", away:"Senegal", hs:3, as:2, done:true, win:"Belgium"},
   {stage:"R32", home:"Brazil", away:"Japan", hs:2, as:1, done:true, win:"Brazil"},
@@ -561,6 +561,7 @@ const KO_RESULTS = [
   {stage:"R32", home:"Spain", away:"Austria", hs:3, as:0, done:true, win:"Spain"},
   {stage:"R32", home:"Switzerland", away:"Algeria", hs:2, as:0, done:true, win:"Switzerland"},
   {stage:"R32", home:"USA", away:"Bosnia &amp; Herzegovina", hs:2, as:0, done:true, win:"USA"},
+  {stage:"R16", home:"Argentina", away:"Egypt", hs:0, as:0, done:false},
   {stage:"R16", home:"Brazil", away:"Norway", hs:0, as:0, done:false},
   {stage:"R16", home:"Canada", away:"Morocco", hs:0, as:0, done:false},
   {stage:"R16", home:"Mexico", away:"England", hs:0, as:0, done:false},
