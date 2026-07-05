@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # lets the job dispatch the Deploy Pages workflow after pushing
 
 concurrency:
   group: update-results
@@ -28,6 +29,7 @@ jobs:
         run: node scripts/update-results.mjs
 
       - name: Commit & push if changed
+        id: commit
         run: |
           if [[ -n "$(git status --porcelain index.html)" ]]; then
             git config user.name "sweepstake-bot"
@@ -35,7 +37,18 @@ jobs:
             git add index.html
             git commit -m "Auto-update results ($(date -u +%Y-%m-%d))"
             git push
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
             echo "Pushed updated results."
           else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             echo "No changes — nothing to commit."
           fi
+
+      # Pushes made with GITHUB_TOKEN never fire `on: push` workflows (GitHub's
+      # recursion guard), so the Pages deploy must be dispatched explicitly —
+      # otherwise the site stays stale even though main has the new scores.
+      - name: Trigger Pages deploy
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pages.yml --ref main --repo "$GITHUB_REPOSITORY"
