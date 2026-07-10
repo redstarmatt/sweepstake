@@ -393,7 +393,7 @@
   <div class="header-inner">
     <h1>⚽ World Cup 2026 <span class="gold">Sweepstake</span></h1>
     <div id="phase" class="phase" hidden></div>
-    <div class="updated">Last updated: 9 July 2026</div>
+    <div class="updated">Last updated: 10 July 2026</div>
     <nav id="nav">
       <button class="active" data-tab="leaderboard">Leaderboard</button>
       <button data-tab="knockout">Knockout</button>
@@ -540,7 +540,8 @@ const RESULTS = [
   {date:"Jun 27", group:"K", home:"Colombia", away:"Portugal", hs:0, as:0},
   {date:"Jun 27", group:"J", home:"Algeria", away:"Austria", hs:3, as:3},
   {date:"Jun 27", group:"K", home:"DR Congo", away:"Uzbekistan", hs:3, as:1},
-  {date:"Jul 9", group:"I", home:"France", away:"Morocco", hs:2, as:0}
+  {date:"Jul 9", group:"I", home:"France", away:"Morocco", hs:2, as:0},
+  {date:"Jul 10", group:"H", home:"Spain", away:"Belgium", hs:2, as:1}
 ];
 
 // Knockout matches — auto-populated by scripts/update-results.mjs from the live feeds.
@@ -573,7 +574,8 @@ const KO_RESULTS = [
   {stage:"QF", home:"Argentina", away:"Switzerland", hs:0, as:0, done:false},
   {stage:"QF", home:"France", away:"Morocco", hs:2, as:0, done:true, win:"France"},
   {stage:"QF", home:"Norway", away:"England", hs:0, as:0, done:false},
-  {stage:"QF", home:"Spain", away:"Belgium", hs:0, as:0, done:false}
+  {stage:"QF", home:"Spain", away:"Belgium", hs:2, as:1, done:true, win:"Spain"},
+  {stage:"SF", home:"France", away:"Spain", hs:0, as:0, done:false}
 ];
 
 const FLAGS = {
