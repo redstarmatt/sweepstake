@@ -24,7 +24,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
+      # Explicit ref: a dispatched run pins its checkout SHA when the run is
+      # *created*, and the update-results dispatch can land before the just-pushed
+      # commit is visible (2026-07-15: deployed the previous day's commit, site
+      # stale for a day). `ref: main` makes checkout fetch main's current tip at
+      # execution time instead of the pinned SHA.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
